@@ -74,12 +74,13 @@ export async function registerBridgeServer(
             outputChannel.appendLine('Added new server registration');
         }
 
-        // Save config
+        // Save config to file-based Antigravity config
         await saveConfig(configPath, config);
         outputChannel.appendLine('Configuration saved successfully');
 
-        // Also register in VS Code settings for Antigravity extension discovery
-        await registerInVsCodeSettings(serverConfig);
+        // Note: We don't register in VS Code settings as that requires
+        // the parent Antigravity extension to declare the setting schema.
+        // File-based configuration is sufficient for MCP server discovery.
 
         return true;
 
@@ -179,34 +180,4 @@ async function saveConfig(
 ): Promise<void> {
     const content = JSON.stringify(config, null, 2);
     fs.writeFileSync(configPath, content, 'utf-8');
-}
-
-/**
- * Register in VS Code settings for extension discovery.
- */
-async function registerInVsCodeSettings(
-    serverConfig: McpServerConfig
-): Promise<void> {
-    const vsConfig = vscode.workspace.getConfiguration('antigravity');
-
-    // Get existing MCP servers or empty array
-    const mcpServers = vsConfig.get<McpServerConfig[]>('mcpServers', []);
-
-    // Check if already registered
-    const existingIndex = mcpServers.findIndex(
-        s => s.name === serverConfig.name
-    );
-
-    if (existingIndex >= 0) {
-        mcpServers[existingIndex] = serverConfig;
-    } else {
-        mcpServers.push(serverConfig);
-    }
-
-    // Update settings
-    await vsConfig.update(
-        'mcpServers',
-        mcpServers,
-        vscode.ConfigurationTarget.Global
-    );
 }
