@@ -5,6 +5,11 @@
     "version": "2.0.0",
     "publisher": "antigravity-platform",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/sajidmahamud835/antigravity-jules-integration.git"
+    },
+    "homepage": "https://github.com/sajidmahamud835/antigravity-jules-integration#readme",
     "engines": {
         "vscode": "^1.85.0"
     },
