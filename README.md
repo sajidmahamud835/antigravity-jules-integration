@@ -2,6 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://marketplace.visualstudio.com/items?itemName=antigravity-platform.antigravity-jules-integration)
 ![Status](https://img.shields.io/badge/status-active-success)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 **Jules for Antigravity** is a powerful bi-directional bridge that connects your local coding agents (like Antigravity) with **Google Jules**, an advanced autonomous remote coding agent.
 
@@ -19,6 +20,27 @@
 1. **Install Antigravity IDE** or the VS Code extension.
 2. Search for "Jules for Antigravity" in the Extensions view.
 3. Click Install.
+
+## Configuration
+
+Before you can start sessions, you must configure your access credentials.
+
+### 1. Prerequisites
+*   **Install the GitHub App:** You must install the [Jules GitHub App](https://jules.google.com/settings/repositories) on the repositories you wish to use.
+*   **Enable the API:** Ensure the **Jules API** is enabled in your Google Cloud Project.
+
+### 2. Get Your API Key
+1. Go to the [Google Cloud Console Credentials Page](https://console.cloud.google.com/apis/credentials).
+2. Create a new API Key (or use an existing one).
+3. Copy the key string (starts with `AIza...`).
+
+### 3. Add Key to Extension
+1. Open Visual Studio Code.
+2. Open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`).
+3. Type and select **`Jules: Set API Key`**.
+4. Paste your API Key and press Enter.
+
+> 🔒 **Security Note:** Your key is stored securely in the local operating system's Keychain/Credential Manager using VS Code's SecretStorage API.
 
 ## Usage Guide
 
@@ -61,4 +83,4 @@ We welcome contributions! Whether you're fixing bugs, improving the context gath
 
 ## License
 
-Google Internal - Confidential
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
