@@ -9,6 +9,17 @@ This document outlines the internal architecture of `antigravity-jules-integrati
 
 The extension is built on a modular architecture designed for security, maintainability, and extensibility.
 
+```mermaid
+graph TD
+    UI[Jules Panel UI] -->|Start Session| Ext[Extension Host]
+    Ext -->|Gather Context| CG[Context Gatherer]
+    CG -->|Read| VS[VS Code Editors]
+    CG -->|Diff| Git[Git Repo]
+    CG -->|Read| Art[Antigravity Artifacts]
+    Ext -->|Create Session| API[Jules API]
+    API -->|Session ID| UI
+```
+
 ### 1. Core Components
 
 - **`extension.ts`**: Entry point. Orchestrates component initialization and wiring.
