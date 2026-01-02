@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import { JulesClient, SessionStatus, ThoughtSignature } from '../julesClient';
 import { getPanelContent } from './panelContent';
+import { ContextGatherer } from '../context/ContextGatherer';
 
 export class JulesPanel implements vscode.WebviewViewProvider {
     public static readonly viewType = 'julesForAntigravity.panel';
@@ -16,11 +17,14 @@ export class JulesPanel implements vscode.WebviewViewProvider {
     private _disposables: vscode.Disposable[] = [];
     private _pollingInterval?: NodeJS.Timeout;
     private readonly _pollIntervalMs = 5000;
+    private _contextGatherer: ContextGatherer;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _julesClient: JulesClient
-    ) { }
+    ) {
+        this._contextGatherer = new ContextGatherer();
+    }
 
     /**
      * Called when a view first becomes visible.
@@ -73,7 +77,7 @@ export class JulesPanel implements vscode.WebviewViewProvider {
     private async _handleWebviewMessage(message: WebviewMessage): Promise<void> {
         switch (message.command) {
             case 'createSession':
-                await this._createSession(message.task || '', message.contextFiles || []);
+                await this._createSession(message.task || '');
                 break;
             case 'refreshSessions':
                 await this._refreshSessions();
@@ -92,21 +96,57 @@ export class JulesPanel implements vscode.WebviewViewProvider {
     }
 
     /**
-     * Create a new Jules session.
+     * Create a new Jules session with automated context gathering.
      */
-    private async _createSession(task: string, contextFiles: string[]): Promise<void> {
+    private async _createSession(missionBrief: string): Promise<void> {
         try {
             this._postMessage({ type: 'loading', loading: true });
-            const session = await this._julesClient.createSession(task, contextFiles);
+
+            // 1. Automatically gather workspace context
+            const context = await this._contextGatherer.gatherContext();
+
+            // 2. Generate optimized XML prompt
+            const fullPrompt = this._contextGatherer.generatePrompt(context, missionBrief);
+
+            // 3. Determine best repository context
+            let owner = context.gitContext?.owner || 'unknown-owner';
+            let repo = context.gitContext?.repo || 'unknown-repo';
+            let branch = context.gitContext?.branch || 'main';
+
+            // Validate git context exists
+            if (!context.gitContext) {
+                vscode.window.showWarningMessage(
+                    'No Git repository detected. Session context might be limited.'
+                );
+            }
+
+            // 4. Create session via API
+            const sessionData = await this._julesClient.createSession(
+                owner,
+                repo,
+                branch,
+                fullPrompt
+            );
+
+            // Construct full session status object for UI
+            const session: SessionStatus = {
+                id: sessionData.id,
+                task: missionBrief,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
             this._postMessage({
                 type: 'sessionCreated',
                 session
             });
             await this._refreshSessions();
         } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
             this._postMessage({
                 type: 'error',
-                message: `Failed to create session: ${error}`
+                message: `Failed to start session: ${msg}`
             });
         } finally {
             this._postMessage({ type: 'loading', loading: false });

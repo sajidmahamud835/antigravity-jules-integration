@@ -24,6 +24,7 @@ import {
     DELEGATE_TO_JULES_SCHEMA
 } from './types';
 import { JulesClient } from '../julesClient';
+import { ContextGatherer } from '../context/ContextGatherer';
 
 // ============================================================================
 // Bridge Server Implementation
@@ -313,10 +314,6 @@ export class BridgeServer {
         }
     }
 
-    // ========================================================================
-    // Tool Implementations
-    // ========================================================================
-
     /**
      * Execute the delegate_to_jules tool.
      */
@@ -338,16 +335,32 @@ export class BridgeServer {
             };
         }
 
-        const contextFiles = input.context_files || [];
-
         try {
             this._log(`Delegating task to Jules: ${input.task.substring(0, 100)}...`);
 
+            // Automatically gather context
+            const gatherer = new ContextGatherer();
+            const context = await gatherer.gatherContext();
+            const fullPrompt = gatherer.generatePrompt(context, input.task);
+
+            const owner = context.gitContext?.owner || 'unknown';
+            const repo = context.gitContext?.repo || 'unknown';
+            const branch = context.gitContext?.branch || 'main';
+
             // Create a session via the JulesClient
-            const session = await this._julesClient.createSession(
-                input.task,
-                contextFiles
+            const sessionData = await this._julesClient.createSession(
+                owner,
+                repo,
+                branch,
+                fullPrompt
             );
+
+            // Construct response object (since API returns JulesSession, we need to wrap it if needed, 
+            // but the tool output just needs an ID and status)
+            const session = {
+                id: sessionData.id,
+                status: 'pending' // Initial status
+            };
 
             const result: McpToolCallResult = {
                 content: [

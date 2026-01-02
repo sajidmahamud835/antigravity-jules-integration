@@ -384,16 +384,15 @@ export function getPanelContent(
 
     <div class="create-form hidden" id="createForm">
         <div class="form-group">
-            <label>Task Description</label>
-            <textarea id="taskInput" rows="3" placeholder="Describe the task for Jules..."></textarea>
-        </div>
-        <div class="form-group">
-            <label>Context Files (comma-separated paths)</label>
-            <input type="text" id="contextFilesInput" placeholder="src/main.ts, src/utils.ts">
+            <label>Task Description (Mission Brief)</label>
+            <textarea id="taskInput" rows="3" placeholder="Describe what you want Jules to do..."></textarea>
+            <p style="font-size: 10px; color: var(--text-secondary); margin-top: 4px;">
+                * Context (active file, git diff, artifacts) will be gathered automatically.
+            </p>
         </div>
         <div class="form-actions">
             <button class="btn" style="background: transparent; color: var(--text-secondary);" id="cancelCreateBtn">Cancel</button>
-            <button class="btn" id="submitCreateBtn">Create Session</button>
+            <button class="btn" id="submitCreateBtn">Start Session</button>
         </div>
     </div>
 
@@ -434,7 +433,6 @@ export function getPanelContent(
         const toast = document.getElementById('toast');
         const statusIndicator = document.getElementById('statusIndicator');
         const taskInput = document.getElementById('taskInput');
-        const contextFilesInput = document.getElementById('contextFilesInput');
 
         // Event Listeners
         newSessionBtn.addEventListener('click', toggleCreateForm);
@@ -477,26 +475,21 @@ export function getPanelContent(
                 taskInput.focus();
             } else {
                 taskInput.value = '';
-                contextFilesInput.value = '';
             }
         }
 
         function handleCreateSession() {
             const task = taskInput.value.trim();
-            const contextFiles = contextFilesInput.value
-                .split(',')
-                .map(f => f.trim())
-                .filter(f => f.length > 0);
             
             if (!task) {
                 showToast('Please enter a task description', 'error');
                 return;
             }
             
+            // Context gathered automatically by extension
             vscode.postMessage({
                 command: 'createSession',
-                task,
-                contextFiles
+                task
             });
         }
 

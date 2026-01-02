@@ -1,16 +1,37 @@
 /**
- * Jules Client
+ * Jules API Client
  * 
- * Implements robust long-polling methods for session status and diff retrieval.
- * Handles communication with the remote Jules orchestration service.
+ * Handles communication with the Google Jules API for creating agent sessions.
+ * Based on the proven legacy Send2Jules implementation.
+ * 
+ * API Endpoint: https://jules.googleapis.com/v1alpha/sessions
+ * Authentication: X-Goog-Api-Key header
  */
 
 import * as vscode from 'vscode';
 import { getApiKey } from './secrets';
 
 // ============================================================================
+// API Configuration
+// ============================================================================
+
+const API_CONFIG = {
+    /** Base URL for Jules API */
+    BASE_URL: 'https://jules.googleapis.com/v1alpha/sessions',
+    /** Request timeout in milliseconds */
+    TIMEOUT_MS: 30000,
+};
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
+
+export interface JulesSession {
+    /** Display name of the session */
+    name: string;
+    /** Unique session identifier for dashboard URLs */
+    id: string;
+}
 
 export interface SessionStatus {
     id: string;
@@ -43,17 +64,29 @@ export interface FileDiff {
     patch: string;
 }
 
-interface CreateSessionRequest {
-    task: string;
-    contextFiles: string[];
-    repositoryUrl?: string;
-    baseBranch?: string;
+// ============================================================================
+// Error Classes
+// ============================================================================
+
+export class JulesApiError extends Error {
+    constructor(
+        message: string,
+        public statusCode?: number,
+        public rawError?: string
+    ) {
+        super(message);
+        this.name = 'JulesApiError';
+    }
 }
 
-interface JulesApiResponse<T> {
-    success: boolean;
-    data?: T;
-    error?: string;
+export class ProjectNotInitializedError extends Error {
+    constructor(public owner: string, public repo: string) {
+        super(
+            `Jules does not have access to ${owner}/${repo}. ` +
+            `Please install the Jules GitHub App at https://jules.google.com/settings/repositories`
+        );
+        this.name = 'ProjectNotInitializedError';
+    }
 }
 
 // ============================================================================
@@ -61,279 +94,155 @@ interface JulesApiResponse<T> {
 // ============================================================================
 
 export class JulesClient {
-    private readonly _baseUrl: string;
-    private readonly _maxRetries = 3;
-    private readonly _retryDelayMs = 1000;
-    private readonly _pollTimeoutMs = 30000;
-
     private _activeSessions: Map<string, SessionStatus> = new Map();
 
-    constructor(baseUrl?: string) {
-        this._baseUrl = baseUrl || 'https://jules.antigravity.dev/api/v1';
-    }
-
-    // ========================================================================
-    // Session Management
-    // ========================================================================
-
     /**
-     * Create a new Jules session for task delegation.
+     * Create a new Jules session for the given repository and prompt.
+     * 
+     * @param owner - GitHub repository owner
+     * @param repo - GitHub repository name 
+     * @param branch - Starting branch name
+     * @param prompt - Context-aware prompt
+     * @returns JulesSession object with session name and ID
      */
-    public async createSession(
-        task: string,
-        contextFiles: string[]
-    ): Promise<SessionStatus> {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    async createSession(
+        owner: string,
+        repo: string,
+        branch: string,
+        prompt: string
+    ): Promise<JulesSession> {
+        // 1. Get and validate API key
+        const apiKey = await getApiKey();
+        if (!apiKey) {
+            throw new JulesApiError(
+                'Jules API key is required. Run "Set Jules API Key" command to configure.',
+                401
+            );
+        }
 
-        const request: CreateSessionRequest = {
-            task,
-            contextFiles,
-            repositoryUrl: await this._getRepositoryUrl(),
-            baseBranch: await this._getCurrentBranch()
+        // 2. Prepare request payload (matching legacy structure)
+        const payload = {
+            prompt: prompt.trim(),
+            sourceContext: {
+                source: `sources/github/${owner}/${repo}`,
+                githubRepoContext: { startingBranch: branch }
+            },
+            title: `Auto-Handoff: ${new Date().toLocaleTimeString()}`
         };
 
-        const response = await this._apiRequest<SessionStatus>(
-            'POST',
-            '/sessions',
-            request
-        );
+        // 3. Add request timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
 
-        if (response.success && response.data) {
-            this._activeSessions.set(response.data.id, response.data);
-            return response.data;
+        try {
+            // 4. Make API request to correct endpoint
+            const response = await fetch(API_CONFIG.BASE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': apiKey
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            // 5. Handle API errors with user-friendly messages
+            if (!response.ok) {
+                const errorText = await response.text();
+
+                // Special handling for repository not initialized (404)
+                if (response.status === 404 && errorText.includes("Requested entity was not found")) {
+                    throw new ProjectNotInitializedError(owner, repo);
+                }
+
+                // Sanitize error message
+                const sanitizedError = this.sanitizeApiError(response.status);
+                throw new JulesApiError(sanitizedError, response.status, errorText);
+            }
+
+            // 6. Parse and return response
+            const responseData = await response.json() as JulesSession;
+            return responseData;
+
+        } catch (error: unknown) {
+            clearTimeout(timeoutId);
+
+            // Handle timeout
+            if (error instanceof Error && error.name === 'AbortError') {
+                throw new JulesApiError(
+                    'Request to Jules API timed out. Please check your network connection.',
+                    408
+                );
+            }
+
+            // Re-throw our custom errors
+            if (error instanceof JulesApiError || error instanceof ProjectNotInitializedError) {
+                throw error;
+            }
+
+            // Wrap unexpected errors
+            throw new JulesApiError(
+                'An unexpected error occurred while creating Jules session',
+                undefined,
+                error instanceof Error ? error.message : String(error)
+            );
         }
-
-        throw new Error(response.error || 'Failed to create session');
     }
 
     /**
-     * Get all active sessions.
+     * Get all active sessions (for UI display).
      */
-    public async getActiveSessions(): Promise<SessionStatus[]> {
-        const response = await this._apiRequest<SessionStatus[]>(
-            'GET',
-            '/sessions?status=active'
-        );
-
-        if (response.success && response.data) {
-            // Update local cache
-            for (const session of response.data) {
-                this._activeSessions.set(session.id, session);
-            }
-            return response.data;
-        }
-
-        // Return cached sessions on failure
+    async getActiveSessions(): Promise<SessionStatus[]> {
+        // Return cached sessions - in production, this would poll the API
         return Array.from(this._activeSessions.values());
     }
 
     /**
-     * Get the status of a specific session with long-polling support.
+     * Get thought signatures for a session.
      */
-    public async pollSessionStatus(
-        sessionId: string,
-        timeoutMs: number = this._pollTimeoutMs
-    ): Promise<SessionStatus> {
-        const startTime = Date.now();
-        let lastStatus: SessionStatus | undefined;
+    async getThoughtSignatures(sessionId: string): Promise<ThoughtSignature[]> {
+        // Placeholder - would call Jules API in production
+        return [];
+    }
 
-        while (Date.now() - startTime < timeoutMs) {
-            const response = await this._apiRequest<SessionStatus>(
-                'GET',
-                `/sessions/${sessionId}`,
-                undefined,
-                { 'X-Long-Poll': 'true', 'X-Poll-Timeout': String(timeoutMs) }
-            );
-
-            if (response.success && response.data) {
-                lastStatus = response.data;
-                this._activeSessions.set(sessionId, response.data);
-
-                // Return immediately if session is complete
-                if (['completed', 'failed', 'cancelled'].includes(response.data.status)) {
-                    return response.data;
-                }
-            }
-
-            // Short delay before next poll
-            await this._delay(1000);
-        }
-
-        if (lastStatus) {
-            return lastStatus;
-        }
-
-        throw new Error(`Timeout waiting for session ${sessionId} status`);
+    /**
+     * Get the diff/patch from a completed session.
+     */
+    async getSessionDiff(sessionId: string): Promise<SessionDiff> {
+        // Placeholder - would call Jules API in production
+        throw new JulesApiError('Session diff not yet available', 404);
     }
 
     /**
      * Cancel an active session.
      */
-    public async cancelSession(sessionId: string): Promise<void> {
-        const response = await this._apiRequest<void>(
-            'POST',
-            `/sessions/${sessionId}/cancel`
-        );
-
-        if (!response.success) {
-            throw new Error(response.error || 'Failed to cancel session');
-        }
-
+    async cancelSession(sessionId: string): Promise<void> {
         this._activeSessions.delete(sessionId);
     }
 
-    // ========================================================================
-    // Thought Signatures
-    // ========================================================================
-
     /**
-     * Get thought signatures for a session.
-     * These represent the agent's reasoning process.
+     * Sanitize API error messages to prevent information disclosure.
      */
-    public async getThoughtSignatures(
-        sessionId: string
-    ): Promise<ThoughtSignature[]> {
-        const response = await this._apiRequest<ThoughtSignature[]>(
-            'GET',
-            `/sessions/${sessionId}/thoughts`
-        );
-
-        if (response.success && response.data) {
-            return response.data;
-        }
-
-        return [];
-    }
-
-    // ========================================================================
-    // Diff Retrieval
-    // ========================================================================
-
-    /**
-     * Get the diff/patch from a completed session.
-     */
-    public async getSessionDiff(sessionId: string): Promise<SessionDiff> {
-        const response = await this._apiRequest<SessionDiff>(
-            'GET',
-            `/sessions/${sessionId}/diff`
-        );
-
-        if (response.success && response.data) {
-            return response.data;
-        }
-
-        throw new Error(response.error || 'Failed to retrieve session diff');
-    }
-
-    // ========================================================================
-    // Private Helpers
-    // ========================================================================
-
-    /**
-     * Make an API request with retry logic and exponential backoff.
-     */
-    private async _apiRequest<T>(
-        method: string,
-        endpoint: string,
-        body?: unknown,
-        additionalHeaders?: Record<string, string>
-    ): Promise<JulesApiResponse<T>> {
-        let lastError: Error | undefined;
-
-        for (let attempt = 0; attempt < this._maxRetries; attempt++) {
-            try {
-                const apiKey = await getApiKey();
-
-                const headers: Record<string, string> = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
-                    'X-Client': 'antigravity-jules-integration',
-                    ...additionalHeaders
-                };
-
-                const response = await fetch(`${this._baseUrl}${endpoint}`, {
-                    method,
-                    headers,
-                    body: body ? JSON.stringify(body) : undefined
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({})) as { message?: string };
-                    throw new Error(
-                        errorData.message ||
-                        `HTTP ${response.status}: ${response.statusText}`
-                    );
-                }
-
-                const data = await response.json() as T;
-                return { success: true, data };
-
-            } catch (error) {
-                lastError = error as Error;
-
-                // Exponential backoff
-                if (attempt < this._maxRetries - 1) {
-                    const delay = this._retryDelayMs * Math.pow(2, attempt);
-                    await this._delay(delay);
-                }
-            }
-        }
-
-        return {
-            success: false,
-            error: lastError?.message || 'Unknown error occurred'
+    private sanitizeApiError(statusCode: number): string {
+        const genericErrors: Record<number, string> = {
+            400: 'Invalid request. Please check your repository configuration.',
+            401: 'Authentication failed. Please verify your API key is correct.',
+            403: 'Access denied. Check your Jules permissions.',
+            404: 'Repository not found in Jules. Please add it at jules.google.com/settings/repositories',
+            408: 'Request timed out. Please try again.',
+            429: 'Rate limit exceeded. Please try again later.',
+            500: 'Jules API error. Please try again.',
+            503: 'Jules service is temporarily unavailable.'
         };
-    }
-
-    /**
-     * Get the repository URL from git config.
-     */
-    private async _getRepositoryUrl(): Promise<string | undefined> {
-        try {
-            const gitExtension = vscode.extensions.getExtension('vscode.git');
-            if (gitExtension) {
-                const git = gitExtension.exports.getAPI(1);
-                const repo = git.repositories[0];
-                if (repo) {
-                    const remotes = repo.state.remotes;
-                    const origin = remotes.find((r: { name: string }) => r.name === 'origin');
-                    return origin?.fetchUrl || origin?.pushUrl;
-                }
-            }
-        } catch {
-            // Ignore errors
-        }
-        return undefined;
-    }
-
-    /**
-     * Get the current branch name.
-     */
-    private async _getCurrentBranch(): Promise<string | undefined> {
-        try {
-            const gitExtension = vscode.extensions.getExtension('vscode.git');
-            if (gitExtension) {
-                const git = gitExtension.exports.getAPI(1);
-                const repo = git.repositories[0];
-                return repo?.state.HEAD?.name;
-            }
-        } catch {
-            // Ignore errors
-        }
-        return undefined;
-    }
-
-    /**
-     * Delay execution for a specified duration.
-     */
-    private _delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return genericErrors[statusCode] || `API request failed with status ${statusCode}`;
     }
 
     /**
      * Dispose resources.
      */
-    public dispose(): void {
+    dispose(): void {
         this._activeSessions.clear();
     }
 }

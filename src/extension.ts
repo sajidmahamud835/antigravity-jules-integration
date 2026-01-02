@@ -16,6 +16,7 @@ import { GitContext } from './gitContext';
 import { BridgeServer } from './mcp/BridgeServer';
 import { registerBridgeServer, unregisterBridgeServer } from './mcp/registration';
 import { initializeSecretStorage, promptForApiKey, hasApiKey } from './secrets';
+import { ContextGatherer } from './context/ContextGatherer';
 
 // ============================================================================
 // Extension State
@@ -142,6 +143,7 @@ export async function activate(
 // ============================================================================
 
 function registerCommands(context: vscode.ExtensionContext): void {
+
     // Create Session Command
     const createSessionCommand = vscode.commands.registerCommand(
         'julesForAntigravity.createSession',
@@ -153,10 +155,25 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
             if (task && julesClient) {
                 try {
-                    const session = await julesClient.createSession(task, []);
+                    vscode.window.showInformationMessage('Gathering context and starting session...');
+
+                    const gatherer = new ContextGatherer();
+                    const context = await gatherer.gatherContext();
+                    const fullPrompt = gatherer.generatePrompt(context, task);
+
+                    const owner = context.gitContext?.owner || 'unknown';
+                    const repo = context.gitContext?.repo || 'unknown';
+                    const branch = context.gitContext?.branch || 'main';
+
+                    const session = await julesClient.createSession(owner, repo, branch, fullPrompt);
+
                     vscode.window.showInformationMessage(
                         `Jules session created: ${session.id.substring(0, 8)}...`
                     );
+
+                    // Refresh panel if visible
+                    vscode.commands.executeCommand('julesForAntigravity.refreshSessions');
+
                 } catch (error) {
                     vscode.window.showErrorMessage(`Failed to create session: ${error}`);
                 }
