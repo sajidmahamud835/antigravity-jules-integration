@@ -182,6 +182,13 @@ export class JulesClient {
 
             // 6. Parse and return response
             const responseData = await response.json() as JulesSession;
+
+            // CRITICAL FIX: API returns 'name' but might not return 'id'
+            // We must extract 'id' from 'name' (format: sessions/uuid)
+            if (!responseData.id && responseData.name) {
+                responseData.id = responseData.name.split('/').pop() || 'unknown';
+            }
+
             return responseData;
 
         } catch (error: unknown) {
