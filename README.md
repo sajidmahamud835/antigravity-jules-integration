@@ -11,11 +11,18 @@
 > [!NOTE]
 > **Compatibility Notice**: This extension currently **requires [Antigravity](https://antigravity.dev)** to function. A standalone VS Code version will be released soon.
 
+<div align="center">
+
+[![Submit Issue](https://img.shields.io/badge/Submit-Issue-d73a49?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sajid-mah-m/antigravity-jules-integration/issues/new)
+[![Submit PR](https://img.shields.io/badge/Submit-PR-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sajid-mah-m/antigravity-jules-integration/compare)
+
+</div>
+
 ## Screenshots
 
 <div align="center">
-  <img src="resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
-  <img src="resources/ui-new-session.png" alt="New Session Wizard" width="45%">
+  <img src="https://raw.githubusercontent.com/sajid-mah-m/antigravity-jules-integration/master/resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
+  <img src="https://raw.githubusercontent.com/sajid-mah-m/antigravity-jules-integration/master/resources/ui-new-session.png" alt="New Session Wizard" width="45%">
 </div>
 
 ## Features
@@ -86,10 +93,10 @@ For a deep dive into the internal components (`BridgeServer`, `ContextGatherer`)
 
 ## Documentation
 
-For more detailed information, please check the [docs/](docs/) folder:
-- [Architecture Guide](docs/Architecture.md)
-- [Troubleshooting](docs/Troubleshooting.md)
-- [Home](docs/Home.md)
+For more detailed information, please check the [docs/](https://github.com/sajid-mah-m/antigravity-jules-integration/tree/master/docs) folder:
+- [Architecture Guide](https://github.com/sajid-mah-m/antigravity-jules-integration/blob/master/docs/Architecture.md)
+- [Troubleshooting](https://github.com/sajid-mah-m/antigravity-jules-integration/blob/master/docs/Troubleshooting.md)
+- [Home](https://github.com/sajid-mah-m/antigravity-jules-integration/blob/master/docs/Home.md)
 
 ## Contributing
 
