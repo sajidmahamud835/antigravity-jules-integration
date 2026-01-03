@@ -828,11 +828,15 @@ export function getPanelContent(
             const statusClass = session.status.toLowerCase();
             const isComplete = session.status === 'completed';
             const isRunning = session.status === 'running' || session.status === 'pending';
+            
+            // Safe ID display
+            const safeId = (session.id || 'unknown').toString();
+            const displayId = safeId.length > 8 ? safeId.substring(0, 8) + '...' : safeId;
 
             return \`
                 <div class="session-card">
                     <div class="session-header">
-                        <span class="session-id">\${session.id.substring(0, 8)}...</span>
+                        <span class="session-id">\${displayId}</span>
                         <span class="session-status \${statusClass}">\${session.status}</span>
                     </div>
                     <div class="session-task">\${escapeHtml(session.task)}</div>
