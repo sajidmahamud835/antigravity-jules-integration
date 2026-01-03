@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import { JulesClient, SessionStatus, ThoughtSignature } from '../julesClient';
+import { JulesClient, SessionStatus, ThoughtSignature, ProjectNotInitializedError } from '../julesClient';
 import { getPanelContent } from './panelContent';
 import { ContextGatherer } from '../context/ContextGatherer';
 
@@ -92,6 +92,16 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                     await this._cancelSession(message.sessionId);
                 }
                 break;
+            case 'checkRepoAccess':
+                if (message.owner && message.repo) {
+                    await this._checkRepoAccess(message.owner, message.repo, message.pendingTask);
+                }
+                break;
+            case 'openExternalUrl':
+                if (message.url) {
+                    vscode.env.openExternal(vscode.Uri.parse(message.url));
+                }
+                break;
         }
     }
 
@@ -147,11 +157,71 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             });
             await this._refreshSessions();
         } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
+            // Check if this is a repository access error
+            if (error instanceof ProjectNotInitializedError) {
+                this._postMessage({
+                    type: 'showRepoSetupWizard',
+                    owner: error.owner,
+                    repo: error.repo,
+                    pendingTask: missionBrief
+                });
+            } else {
+                const msg = error instanceof Error ? error.message : String(error);
+                this._postMessage({
+                    type: 'error',
+                    message: `Failed to start session: ${msg}`
+                });
+            }
+        } finally {
+            this._postMessage({ type: 'loading', loading: false });
+        }
+    }
+
+    /**
+     * Check if Jules now has access to the repository and retry if successful.
+     */
+    private async _checkRepoAccess(owner: string, repo: string, pendingTask?: string): Promise<void> {
+        try {
+            this._postMessage({ type: 'loading', loading: true });
+
+            // Try a minimal API call to check access
+            const testSession = await this._julesClient.createSession(
+                owner,
+                repo,
+                'main',
+                'Test access - this session will be used for: ' + (pendingTask || 'user task')
+            );
+
+            // If we get here, access is granted!
             this._postMessage({
-                type: 'error',
-                message: `Failed to start session: ${msg}`
+                type: 'repoAccessGranted',
+                owner,
+                repo
             });
+
+            // If there was a pending task, create the real session
+            if (pendingTask) {
+                // Small delay for UX
+                setTimeout(() => {
+                    this._createSession(pendingTask);
+                }, 500);
+            }
+
+        } catch (error) {
+            if (error instanceof ProjectNotInitializedError) {
+                this._postMessage({
+                    type: 'repoAccessStillDenied',
+                    owner,
+                    repo,
+                    message: 'Jules still doesn\'t have access. Please complete the setup steps.'
+                });
+            } else {
+                const msg = error instanceof Error ? error.message : String(error);
+                this._postMessage({
+                    type: 'error',
+                    message: `Error checking access: ${msg}`
+                });
+            }
         } finally {
             this._postMessage({ type: 'loading', loading: false });
         }
@@ -297,19 +367,25 @@ export class JulesPanel implements vscode.WebviewViewProvider {
     }
 }
 
-// Message types for webview communication
 interface WebviewMessage {
-    command: 'createSession' | 'refreshSessions' | 'applyRemoteBranch' | 'cancelSession';
+    command: 'createSession' | 'refreshSessions' | 'applyRemoteBranch' | 'cancelSession' | 'checkRepoAccess' | 'openExternalUrl';
     task?: string;
     contextFiles?: string[];
     sessionId?: string;
+    owner?: string;
+    repo?: string;
+    pendingTask?: string;
+    url?: string;
 }
 
 interface ExtensionMessage {
-    type: 'sessionsUpdated' | 'sessionCreated' | 'loading' | 'error' | 'success';
+    type: 'sessionsUpdated' | 'sessionCreated' | 'loading' | 'error' | 'success' | 'showRepoSetupWizard' | 'repoAccessGranted' | 'repoAccessStillDenied';
     sessions?: SessionStatus[];
     session?: SessionStatus;
     thoughtSignatures?: Map<string, ThoughtSignature[]>;
     loading?: boolean;
     message?: string;
+    owner?: string;
+    repo?: string;
+    pendingTask?: string;
 }

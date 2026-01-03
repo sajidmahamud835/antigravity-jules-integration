@@ -321,6 +321,195 @@ export function getPanelContent(
             }
         }
 
+        /* Repository Setup Wizard Styles */
+        .wizard-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .wizard-overlay.hidden {
+            display: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .wizard-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 380px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .wizard-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .wizard-header .icon {
+            font-size: 24px;
+        }
+
+        .wizard-header h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .wizard-repo {
+            background: var(--bg-primary);
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 13px;
+        }
+
+        .wizard-repo .folder-icon {
+            font-size: 16px;
+        }
+
+        .wizard-steps {
+            margin-bottom: 20px;
+        }
+
+        .wizard-step {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .wizard-step:last-child {
+            border-bottom: none;
+        }
+
+        .step-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--vscode-button-foreground);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .step-number.completed {
+            background: var(--success);
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .step-description {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .wizard-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--vscode-textLink-foreground);
+            text-decoration: none;
+            font-size: 12px;
+            margin-top: 6px;
+            cursor: pointer;
+        }
+
+        .wizard-link:hover {
+            text-decoration: underline;
+        }
+
+        .wizard-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .wizard-actions .btn {
+            padding: 8px 16px;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .wizard-status {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .wizard-status.hidden {
+            display: none;
+        }
+
+        .wizard-status.error {
+            background: rgba(255, 100, 100, 0.15);
+            color: var(--error);
+        }
+
+        .wizard-status.success {
+            background: rgba(100, 255, 100, 0.15);
+            color: var(--success);
+        }
+
         .create-form {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -413,6 +602,55 @@ export function getPanelContent(
 
     <div class="toast hidden" id="toast"></div>
 
+    <!-- Repository Setup Wizard Modal -->
+    <div class="wizard-overlay hidden" id="wizardOverlay">
+        <div class="wizard-modal">
+            <div class="wizard-header">
+                <span class="icon">⚠️</span>
+                <h3>Repository Access Required</h3>
+            </div>
+            
+            <div class="wizard-repo">
+                <span class="folder-icon">📁</span>
+                <span id="wizardRepoName">owner/repo</span>
+            </div>
+
+            <div class="wizard-status hidden" id="wizardStatus"></div>
+
+            <div class="wizard-steps">
+                <div class="wizard-step">
+                    <span class="step-number">1</span>
+                    <div class="step-content">
+                        <div class="step-title">Install Jules GitHub App</div>
+                        <div class="step-description">Jules needs permission to access your repositories</div>
+                        <a class="wizard-link" id="openJulesSettings">
+                            Open Jules Settings →
+                        </a>
+                    </div>
+                </div>
+                <div class="wizard-step">
+                    <span class="step-number">2</span>
+                    <div class="step-content">
+                        <div class="step-title">Grant Access to This Repository</div>
+                        <div class="step-description">Select the repository from the list and authorize Jules</div>
+                    </div>
+                </div>
+                <div class="wizard-step">
+                    <span class="step-number">3</span>
+                    <div class="step-content">
+                        <div class="step-title">Return Here</div>
+                        <div class="step-description">Click "Check Access" to verify and continue with your task</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="wizard-actions">
+                <button class="btn btn-secondary" id="wizardCancelBtn">Cancel</button>
+                <button class="btn" id="wizardCheckBtn">Check Access</button>
+            </div>
+        </div>
+    </div>
+
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         
@@ -433,6 +671,15 @@ export function getPanelContent(
         const toast = document.getElementById('toast');
         const statusIndicator = document.getElementById('statusIndicator');
         const taskInput = document.getElementById('taskInput');
+        const wizardOverlay = document.getElementById('wizardOverlay');
+        const wizardRepoName = document.getElementById('wizardRepoName');
+        const wizardStatus = document.getElementById('wizardStatus');
+        const openJulesSettings = document.getElementById('openJulesSettings');
+        const wizardCancelBtn = document.getElementById('wizardCancelBtn');
+        const wizardCheckBtn = document.getElementById('wizardCheckBtn');
+
+        // Wizard state
+        let pendingWizardData = null;
 
         // Event Listeners
         newSessionBtn.addEventListener('click', toggleCreateForm);
@@ -440,6 +687,27 @@ export function getPanelContent(
         submitCreateBtn.addEventListener('click', handleCreateSession);
         refreshBtn.addEventListener('click', () => {
             vscode.postMessage({ command: 'refreshSessions' });
+        });
+
+        // Wizard event listeners
+        openJulesSettings.addEventListener('click', () => {
+            vscode.postMessage({ 
+                command: 'openExternalUrl', 
+                url: 'https://jules.google.com/settings/repositories' 
+            });
+        });
+
+        wizardCancelBtn.addEventListener('click', hideWizard);
+
+        wizardCheckBtn.addEventListener('click', () => {
+            if (pendingWizardData) {
+                vscode.postMessage({
+                    command: 'checkRepoAccess',
+                    owner: pendingWizardData.owner,
+                    repo: pendingWizardData.repo,
+                    pendingTask: pendingWizardData.pendingTask
+                });
+            }
         });
 
         // Message Handler
@@ -464,6 +732,15 @@ export function getPanelContent(
                     break;
                 case 'success':
                     showToast(message.message, 'success');
+                    break;
+                case 'showRepoSetupWizard':
+                    showWizard(message.owner, message.repo, message.pendingTask);
+                    break;
+                case 'repoAccessGranted':
+                    showWizardSuccess();
+                    break;
+                case 'repoAccessStillDenied':
+                    showWizardError(message.message);
                     break;
             }
         });
@@ -577,6 +854,31 @@ export function getPanelContent(
             setTimeout(() => {
                 toast.classList.add('hidden');
             }, 3000);
+        }
+
+        function showWizard(owner, repo, pendingTask) {
+            pendingWizardData = { owner, repo, pendingTask };
+            wizardRepoName.textContent = owner + '/' + repo;
+            wizardStatus.classList.add('hidden');
+            wizardOverlay.classList.remove('hidden');
+        }
+
+        function hideWizard() {
+            wizardOverlay.classList.add('hidden');
+            pendingWizardData = null;
+        }
+
+        function showWizardSuccess() {
+            wizardStatus.textContent = '✓ Access granted! Starting your session...';
+            wizardStatus.className = 'wizard-status success';
+            setTimeout(() => {
+                hideWizard();
+            }, 1500);
+        }
+
+        function showWizardError(message) {
+            wizardStatus.textContent = '✗ ' + (message || 'Access not yet granted');
+            wizardStatus.className = 'wizard-status error';
         }
 
         function escapeHtml(text) {
