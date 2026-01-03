@@ -64,6 +64,24 @@ export interface FileDiff {
     patch: string;
 }
 
+// Jules API Response Types (from GET /sessions)
+interface JulesApiSession {
+    name?: string;
+    title?: string;
+    prompt?: string;
+    state?: string;
+    createTime?: string;
+    updateTime?: string;
+    outputBranch?: string;
+}
+
+interface JulesActivity {
+    name?: string;
+    type?: string;
+    description?: string;
+    createTime?: string;
+}
+
 // ============================================================================
 // Error Classes
 // ============================================================================
@@ -192,19 +210,130 @@ export class JulesClient {
     }
 
     /**
-     * Get all active sessions (for UI display).
+     * Add a session to local tracking after creation.
      */
-    async getActiveSessions(): Promise<SessionStatus[]> {
-        // Return cached sessions - in production, this would poll the API
-        return Array.from(this._activeSessions.values());
+    addSession(session: SessionStatus): void {
+        this._activeSessions.set(session.id, session);
     }
 
     /**
-     * Get thought signatures for a session.
+     * Get all active sessions from Jules API.
+     * Fetches real session data and syncs with local cache.
+     */
+    async getActiveSessions(): Promise<SessionStatus[]> {
+        const apiKey = await getApiKey();
+        if (!apiKey) {
+            // Return cached sessions if no API key
+            return Array.from(this._activeSessions.values());
+        }
+
+        try {
+            const response = await fetch(API_CONFIG.BASE_URL, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': apiKey
+                }
+            });
+
+            if (!response.ok) {
+                console.warn('Failed to fetch sessions from API, using cache');
+                return Array.from(this._activeSessions.values());
+            }
+
+            const data = await response.json() as { sessions?: JulesApiSession[] };
+            const sessions = data.sessions || [];
+
+            // Parse API response into SessionStatus format
+            const parsedSessions: SessionStatus[] = sessions.map(s => this.parseApiSession(s));
+
+            // Update local cache
+            this._activeSessions.clear();
+            for (const session of parsedSessions) {
+                this._activeSessions.set(session.id, session);
+            }
+
+            return parsedSessions;
+        } catch (error) {
+            console.warn('Error fetching sessions:', error);
+            return Array.from(this._activeSessions.values());
+        }
+    }
+
+    /**
+     * Parse Jules API session format to our SessionStatus format.
+     */
+    private parseApiSession(apiSession: JulesApiSession): SessionStatus {
+        // Extract session ID from name (format: "sessions/xxx")
+        const id = apiSession.name?.split('/').pop() || apiSession.name || 'unknown';
+
+        // Map API state to our status
+        let status: SessionStatus['status'] = 'pending';
+        const state = apiSession.state?.toLowerCase() || '';
+        if (state.includes('complete') || state.includes('finished')) {
+            status = 'completed';
+        } else if (state.includes('running') || state.includes('active') || state.includes('in_progress')) {
+            status = 'running';
+        } else if (state.includes('fail') || state.includes('error')) {
+            status = 'failed';
+        } else if (state.includes('cancel')) {
+            status = 'cancelled';
+        }
+
+        return {
+            id,
+            task: apiSession.title || apiSession.prompt?.substring(0, 100) || 'Jules Session',
+            status,
+            createdAt: apiSession.createTime || new Date().toISOString(),
+            updatedAt: apiSession.updateTime || new Date().toISOString(),
+            remoteBranch: apiSession.outputBranch
+        };
+    }
+
+    /**
+     * Get thought signatures for a session (activities/events).
      */
     async getThoughtSignatures(sessionId: string): Promise<ThoughtSignature[]> {
-        // Placeholder - would call Jules API in production
-        return [];
+        const apiKey = await getApiKey();
+        if (!apiKey) return [];
+
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/${sessionId}/activities`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': apiKey
+                }
+            });
+
+            if (!response.ok) return [];
+
+            const data = await response.json() as { activities?: JulesActivity[] };
+            const activities = data.activities || [];
+
+            return activities.map(a => ({
+                id: a.name?.split('/').pop() || 'unknown',
+                sessionId,
+                content: a.description || a.type || 'Activity',
+                timestamp: a.createTime || new Date().toISOString(),
+                type: this.mapActivityType(a.type)
+            }));
+        } catch (error) {
+            console.warn('Error fetching activities:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Map API activity type to our ThoughtSignature type.
+     */
+    private mapActivityType(apiType?: string): ThoughtSignature['type'] {
+        const type = apiType?.toLowerCase() || '';
+        if (type.includes('plan')) return 'planning';
+        if (type.includes('execut') || type.includes('code')) return 'executing';
+        if (type.includes('review') || type.includes('test')) return 'reviewing';
+        if (type.includes('complete') || type.includes('finish')) return 'completed';
+        return 'executing';
     }
 
     /**

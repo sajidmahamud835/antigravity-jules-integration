@@ -151,6 +151,9 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                 updatedAt: new Date().toISOString()
             };
 
+            // Store session locally for immediate visibility
+            this._julesClient.addSession(session);
+
             this._postMessage({
                 type: 'sessionCreated',
                 session
