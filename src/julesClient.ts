@@ -182,6 +182,17 @@ export class JulesClient {
 
             // 6. Parse and return response
             const responseData = await response.json() as JulesSession;
+
+            // 7. Add to local cache for immediate UI update
+            const newSessionStatus: SessionStatus = {
+                id: responseData.id,
+                task: payload.title,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            this.addSession(newSessionStatus);
+
             return responseData;
 
         } catch (error: unknown) {
@@ -222,54 +233,29 @@ export class JulesClient {
      * 
      * @param options.pageSize - Number of sessions to fetch (default: 50, max: 100)
      */
+    async listSessions(options?: { pageSize?: number }): Promise<SessionStatus[]> {
+        const apiKey = await getApiKey();
+        if (!apiKey) {
+            return [];
+        }
+
+        const pageSize = options?.pageSize || 50;
+        return this._fetchSessionsMethod1(apiKey, pageSize);
+    }
+
     async getActiveSessions(options?: { pageSize?: number }): Promise<SessionStatus[]> {
         const LOG_PREFIX = '[JulesClient.getActiveSessions]';
         console.log(`${LOG_PREFIX} Starting session fetch...`);
 
-        const apiKey = await getApiKey();
-        if (!apiKey) {
-            console.warn(`${LOG_PREFIX} No API key available, returning cached sessions`);
-            console.log(`${LOG_PREFIX} Cached session count: ${this._activeSessions.size}`);
-            return Array.from(this._activeSessions.values());
-        }
-
-        const pageSize = options?.pageSize || 50;
-        console.log(`${LOG_PREFIX} API key present, fetching with pageSize=${pageSize}`);
-
-        // Try multiple methods to fetch sessions
-        let sessions: SessionStatus[] = [];
-
-        // Method 1: Standard GET with pageSize
         try {
-            console.log(`${LOG_PREFIX} [Method 1] Trying standard GET with pageSize...`);
-            sessions = await this._fetchSessionsMethod1(apiKey, pageSize);
-            if (sessions.length > 0) {
-                console.log(`${LOG_PREFIX} [Method 1] SUCCESS - Found ${sessions.length} sessions`);
-                this._updateCache(sessions);
-                return sessions;
-            }
-            console.log(`${LOG_PREFIX} [Method 1] Returned empty array, trying next method...`);
+            const sessions = await this.listSessions(options);
+            console.log(`${LOG_PREFIX} Fetched ${sessions.length} sessions from API.`);
+            this._updateCache(sessions);
         } catch (error) {
-            console.error(`${LOG_PREFIX} [Method 1] FAILED:`, error);
+            console.error(`${LOG_PREFIX} API fetch failed, returning cached sessions.`, error);
         }
 
-        // Method 2: Simple GET without parameters
-        try {
-            console.log(`${LOG_PREFIX} [Method 2] Trying simple GET without params...`);
-            sessions = await this._fetchSessionsMethod2(apiKey);
-            if (sessions.length > 0) {
-                console.log(`${LOG_PREFIX} [Method 2] SUCCESS - Found ${sessions.length} sessions`);
-                this._updateCache(sessions);
-                return sessions;
-            }
-            console.log(`${LOG_PREFIX} [Method 2] Returned empty array, trying next method...`);
-        } catch (error) {
-            console.error(`${LOG_PREFIX} [Method 2] FAILED:`, error);
-        }
-
-        // Method 3: Return cached sessions
-        console.log(`${LOG_PREFIX} [Method 3] All API methods failed, returning cached sessions`);
-        console.log(`${LOG_PREFIX} Cached session count: ${this._activeSessions.size}`);
+        console.log(`${LOG_PREFIX} Returning ${this._activeSessions.size} sessions from cache.`);
         return Array.from(this._activeSessions.values());
     }
 

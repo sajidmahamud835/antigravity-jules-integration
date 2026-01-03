@@ -61,8 +61,10 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             }
         });
 
-        // Initial polling start
-        this._startPolling();
+        // Initial polling start if visible
+        if (webviewView.visible) {
+            this._startPolling();
+        }
 
         // Cleanup on dispose
         webviewView.onDidDispose(() => {
