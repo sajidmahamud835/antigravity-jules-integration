@@ -101,13 +101,33 @@ const panelFeatures = [
     ['resolveWebviewView', 'WebviewViewProvider interface'],
     ['_handleWebviewMessage', 'Message handler'],
     ['_createSession', 'Session creation'],
-    ['_refreshSessions', 'Session refresh'],
-    ['_startPolling', 'Polling mechanism'],
+    ['ContextGatherer', 'ContextGatherer integration'],
     ['_postMessage', 'Webview messaging']
 ];
 
 panelFeatures.forEach(([code, name]) => {
     const found = panelContent.includes(code);
+    console.log(`  ${found ? '✓' : '✗'} ${name}`);
+});
+
+// Test 7: Verify API Endpoint
+console.log('\n🌐 Test 7: Verifying Jules API Endpoint...');
+const clientContent = fs.readFileSync('out/julesClient.js', 'utf8');
+const correctUrl = 'jules.googleapis.com';
+const hasCorrectUrl = clientContent.includes(correctUrl);
+console.log(`  ${hasCorrectUrl ? '✓' : '✗'} Uses correct endpoint (${correctUrl})`);
+
+// Test 8: ContextGatherer Implementation
+console.log('\n🧠 Test 8: Checking ContextGatherer...');
+const contextContent = fs.readFileSync('out/context/ContextGatherer.js', 'utf8');
+const contextFeatures = [
+    ['gatherContext', 'Context gathering method'],
+    ['generatePrompt', 'Prompt generation'],
+    ['git diff', 'Git diff capture'],
+    ['activeTextEditor', 'Editor capture']
+];
+contextFeatures.forEach(([code, name]) => {
+    const found = contextContent.includes(code);
     console.log(`  ${found ? '✓' : '✗'} ${name}`);
 });
 

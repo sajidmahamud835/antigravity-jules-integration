@@ -8,7 +8,6 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
-import * as vscode from 'vscode';
 import {
     JsonRpcRequest,
     JsonRpcResponse,
@@ -23,8 +22,8 @@ import {
     DelegateToJulesInput,
     DELEGATE_TO_JULES_SCHEMA
 } from './types';
-import { JulesClient } from '../julesClient';
-import { ContextGatherer } from '../context/ContextGatherer';
+import { JulesClientNode } from '../julesClientNode';
+import { ContextGathererNode } from '../context/ContextGathererNode';
 
 // ============================================================================
 // Bridge Server Implementation
@@ -37,12 +36,12 @@ export class BridgeServer {
 
     private _process: ChildProcess | null = null;
     private _readline: readline.Interface | null = null;
-    private _outputChannel: vscode.OutputChannel;
     private _isInitialized = false;
-    private _messageBuffer: string = '';
 
-    constructor(private readonly _julesClient: JulesClient) {
-        this._outputChannel = vscode.window.createOutputChannel('Jules MCP Bridge');
+    private _julesClient: JulesClientNode;
+
+    constructor() {
+        this._julesClient = new JulesClientNode();
     }
 
     // ========================================================================
@@ -60,7 +59,6 @@ export class BridgeServer {
         this._setupStdioTransport();
 
         this._log('MCP Bridge Server started successfully');
-        this._outputChannel.show(true);
     }
 
     /**
@@ -339,13 +337,24 @@ export class BridgeServer {
             this._log(`Delegating task to Jules: ${input.task.substring(0, 100)}...`);
 
             // Automatically gather context
-            const gatherer = new ContextGatherer();
+            const gatherer = new ContextGathererNode();
             const context = await gatherer.gatherContext();
             const fullPrompt = gatherer.generatePrompt(context, input.task);
 
-            const owner = context.gitContext?.owner || 'unknown';
-            const repo = context.gitContext?.repo || 'unknown';
+            const owner = context.gitContext?.owner;
+            const repo = context.gitContext?.repo;
             const branch = context.gitContext?.branch || 'main';
+
+            if (!owner || !repo) {
+                return {
+                    jsonrpc: '2.0',
+                    id,
+                    error: {
+                        code: JsonRpcErrorCodes.INTERNAL_ERROR,
+                        message: 'Formatting error: Jules requires a GitHub repository context (owner/repo). Please ensure the workspace is a GitHub clone.'
+                    }
+                };
+            }
 
             // Create a session via the JulesClient
             const sessionData = await this._julesClient.createSession(
@@ -355,8 +364,7 @@ export class BridgeServer {
                 fullPrompt
             );
 
-            // Construct response object (since API returns JulesSession, we need to wrap it if needed, 
-            // but the tool output just needs an ID and status)
+            // Construct response object
             const session = {
                 id: sessionData.id,
                 status: 'pending' // Initial status
@@ -387,61 +395,37 @@ export class BridgeServer {
             const message = error instanceof Error ? error.message : String(error);
             this._log(`Error delegating to Jules: ${message}`);
 
-            const result: McpToolCallResult = {
-                content: [
-                    {
-                        type: 'text',
-                        text: `Error: ${message}`
-                    }
-                ],
-                isError: true
-            };
-
             return {
                 jsonrpc: '2.0',
                 id,
-                result
+                result: {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `Error: ${message}`
+                        }
+                    ],
+                    isError: true
+                }
             };
         }
     }
-
-    // ========================================================================
-    // Response Handling
-    // ========================================================================
 
     /**
      * Send a JSON-RPC response via stdout.
      */
     private _sendResponse(response: JsonRpcResponse): void {
         const json = JSON.stringify(response);
-        this._log(`Sending: ${json}`);
+        // this._log(`Sending: ${json}`); // VERBOSE
         process.stdout.write(json + '\n');
     }
 
     /**
-     * Send a JSON-RPC notification via stdout.
-     */
-    private _sendNotification(method: string, params?: Record<string, unknown>): void {
-        const notification: JsonRpcNotification = {
-            jsonrpc: '2.0',
-            method,
-            params
-        };
-        const json = JSON.stringify(notification);
-        this._log(`Sending notification: ${json}`);
-        process.stdout.write(json + '\n');
-    }
-
-    // ========================================================================
-    // Logging
-    // ========================================================================
-
-    /**
-     * Log a message to the output channel.
+     * Log a message to stderr (safe for Stdio transport).
      */
     private _log(message: string): void {
         const timestamp = new Date().toISOString();
-        this._outputChannel.appendLine(`[${timestamp}] ${message}`);
+        console.error(`[${timestamp}] ${message}`);
     }
 
     /**
@@ -449,6 +433,15 @@ export class BridgeServer {
      */
     public dispose(): void {
         this.stop();
-        this._outputChannel.dispose();
     }
 }
+
+// ============================================================================
+// Standalone Entry Point
+// ============================================================================
+
+if (require.main === module) {
+    const server = new BridgeServer();
+    server.start();
+}
+

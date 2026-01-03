@@ -109,15 +109,19 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             const fullPrompt = this._contextGatherer.generatePrompt(context, missionBrief);
 
             // 3. Determine best repository context
-            let owner = context.gitContext?.owner || 'unknown-owner';
-            let repo = context.gitContext?.repo || 'unknown-repo';
+            let owner = context.gitContext?.owner;
+            let repo = context.gitContext?.repo;
             let branch = context.gitContext?.branch || 'main';
 
-            // Validate git context exists
-            if (!context.gitContext) {
-                vscode.window.showWarningMessage(
-                    'No Git repository detected. Session context might be limited.'
-                );
+            // Validate git context exists and is valid
+            if (!owner || !repo) {
+                const msg = 'Jules requires a GitHub repository. Please open a folder that is a clone of a GitHub repo.';
+                vscode.window.showErrorMessage(msg);
+                this._postMessage({
+                    type: 'error',
+                    message: msg
+                });
+                return;
             }
 
             // 4. Create session via API

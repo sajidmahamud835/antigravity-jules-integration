@@ -9,30 +9,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { getApiKey } from '../secrets';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface McpServerConfig {
-    name: string;
-    command: string;
-    args: string[];
-    env?: Record<string, string>;
-    enabled: boolean;
-}
-
-export interface AntigravityConfig {
-    mcpServers: McpServerConfig[];
-}
-
-// ============================================================================
-// Registration Implementation
-// ============================================================================
-
-/**
- * Register the Jules Bridge Server in the Antigravity configuration.
- */
 export async function registerBridgeServer(
     extensionPath: string
 ): Promise<boolean> {
@@ -48,14 +26,28 @@ export async function registerBridgeServer(
         // Load or create config
         let config = await loadConfig(configPath);
 
+        // Get API Key securely
+        let apiKey: string | undefined;
+        try {
+            apiKey = await getApiKey();
+        } catch (e) {
+            outputChannel.appendLine(`Warning: Could not retrieve API Key: ${e}`);
+        }
+
+        const env: Record<string, string> = {
+            NODE_ENV: 'production'
+        };
+
+        if (apiKey) {
+            env['JULES_API_KEY'] = apiKey;
+        }
+
         // Create server configuration
         const serverConfig: McpServerConfig = {
             name: 'jules-bridge',
             command: 'node',
             args: [path.join(extensionPath, 'out', 'mcp', 'BridgeServer.js')],
-            env: {
-                NODE_ENV: 'production'
-            },
+            env,
             enabled: true
         };
 
@@ -120,7 +112,23 @@ export async function unregisterBridgeServer(): Promise<void> {
 }
 
 // ============================================================================
-// Config File Management
+// Types
+// ============================================================================
+
+export interface McpServerConfig {
+    name: string;
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+    enabled: boolean;
+}
+
+export interface AntigravityConfig {
+    mcpServers: McpServerConfig[];
+}
+
+// ============================================================================
+// Registration Implementation
 // ============================================================================
 
 /**

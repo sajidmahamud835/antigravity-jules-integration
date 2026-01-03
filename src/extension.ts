@@ -116,7 +116,7 @@ export async function activate(
     // ========================================================================
     // Step 5: Start MCP Bridge Server
     // ========================================================================
-    bridgeServer = new BridgeServer(julesClient);
+    bridgeServer = new BridgeServer();
     context.subscriptions.push({ dispose: () => bridgeServer?.dispose() });
 
     try {
