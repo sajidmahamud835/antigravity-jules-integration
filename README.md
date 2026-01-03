@@ -110,3 +110,15 @@ We welcome contributions! Whether you're fixing bugs, improving the context gath
 ## License
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+
+---
+
+## 🔗 Related Projects
+
+- **[MarketSync EA](../MarketSync-EA)** - Autonomous trading agent using GPT-4 and ML.
+- **[BankSync](../banksync)** - Complex financial integration with Plaid and Web3.
+- **[EasyCom](../easycom)** - Large-scale application architecture reference.
+
+## 🏷️ Tags
+
+`VS Code Extension` `AI Agent` `Google Jules` `Antigravity` `TypeScript` `Automation` `DevTools`
