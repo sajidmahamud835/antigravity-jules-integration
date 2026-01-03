@@ -11,7 +11,7 @@
     },
     "homepage": "https://github.com/sajidmahamud835/antigravity-jules-integration#readme",
     "engines": {
-        "vscode": "^1.85.0"
+        "vscode": "^1.75.0"
     },
     "categories": [
         "Other",
@@ -75,7 +75,7 @@
     },
     "devDependencies": {
         "@types/node": "^20.10.0",
-        "@types/vscode": "^1.85.0",
+        "@types/vscode": "^1.75.0",
         "@typescript-eslint/eslint-plugin": "^6.13.0",
         "@typescript-eslint/parser": "^6.13.0",
         "eslint": "^8.54.0",
