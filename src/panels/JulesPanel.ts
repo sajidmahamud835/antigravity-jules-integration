@@ -109,10 +109,14 @@ export class JulesPanel implements vscode.WebviewViewProvider {
      * Create a new Jules session with automated context gathering.
      */
     private async _createSession(missionBrief: string): Promise<void> {
+        const LOG = '[JulesPanel._createSession]';
+        console.log(`${LOG} Starting session creation for: "${missionBrief.substring(0, 50)}..."`);
+
         try {
             this._postMessage({ type: 'loading', loading: true });
 
             // 1. Automatically gather workspace context
+            console.log(`${LOG} Step 1: Gathering context...`);
             const context = await this._contextGatherer.gatherContext();
 
             // 2. Generate optimized XML prompt
@@ -135,12 +139,14 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             }
 
             // 4. Create session via API
+            console.log(`${LOG} Step 4: Calling API to create session...`);
             const sessionData = await this._julesClient.createSession(
                 owner,
                 repo,
                 branch,
                 fullPrompt
             );
+            console.log(`${LOG} API returned session:`, sessionData);
 
             // Construct full session status object for UI
             const session: SessionStatus = {
@@ -152,13 +158,18 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             };
 
             // Store session locally for immediate visibility
+            console.log(`${LOG} Step 5: Storing session locally...`);
             this._julesClient.addSession(session);
 
+            console.log(`${LOG} Step 6: Sending sessionCreated message to WebView...`);
             this._postMessage({
                 type: 'sessionCreated',
                 session
             });
+
+            console.log(`${LOG} Step 7: Refreshing sessions list...`);
             await this._refreshSessions();
+            console.log(`${LOG} Session creation complete!`);
         } catch (error) {
             // Check if this is a repository access error
             if (error instanceof ProjectNotInitializedError) {
@@ -234,16 +245,30 @@ export class JulesPanel implements vscode.WebviewViewProvider {
      * Refresh all active sessions.
      */
     private async _refreshSessions(): Promise<void> {
+        const LOG = '[JulesPanel._refreshSessions]';
+        console.log(`${LOG} Starting refresh...`);
+
         try {
             const sessions = await this._julesClient.getActiveSessions();
+            console.log(`${LOG} Got ${sessions.length} sessions from client`);
+
             const thoughtSignatures = await this._getThoughtSignatures(sessions);
 
+            // Convert Map to plain object for serialization
+            const signaturesObject: Record<string, any[]> = {};
+            thoughtSignatures.forEach((value, key) => {
+                signaturesObject[key] = value;
+            });
+
+            console.log(`${LOG} Sending sessionsUpdated message with ${sessions.length} sessions`);
             this._postMessage({
                 type: 'sessionsUpdated',
                 sessions,
-                thoughtSignatures
+                thoughtSignatures: signaturesObject
             });
+            console.log(`${LOG} Refresh complete`);
         } catch (error) {
+            console.error(`${LOG} Error:`, error);
             this._postMessage({
                 type: 'error',
                 message: `Failed to refresh sessions: ${error}`
@@ -385,7 +410,8 @@ interface ExtensionMessage {
     type: 'sessionsUpdated' | 'sessionCreated' | 'loading' | 'error' | 'success' | 'showRepoSetupWizard' | 'repoAccessGranted' | 'repoAccessStillDenied';
     sessions?: SessionStatus[];
     session?: SessionStatus;
-    thoughtSignatures?: Map<string, ThoughtSignature[]>;
+    // Using Record instead of Map - Maps don't serialize properly over postMessage
+    thoughtSignatures?: Record<string, ThoughtSignature[]>;
     loading?: boolean;
     message?: string;
     owner?: string;

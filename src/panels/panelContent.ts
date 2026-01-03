@@ -653,11 +653,14 @@ export function getPanelContent(
 
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
+        console.log('[WebView] Script initialized, vscode API acquired');
         
         // State
         let sessions = [];
         let thoughtSignatures = new Map();
         let isFormVisible = false;
+
+        console.log('[WebView] Initial state - sessions:', sessions.length);
 
         // DOM Elements
         const sessionList = document.getElementById('sessionList');
@@ -787,13 +790,17 @@ export function getPanelContent(
         }
 
         function renderSessions() {
+            console.log('[WebView] renderSessions called, sessions count:', sessions.length);
+            
             if (sessions.length === 0) {
+                console.log('[WebView] No sessions, showing empty state');
                 sessionList.innerHTML = '';
                 sessionList.appendChild(emptyState);
                 emptyState.classList.remove('hidden');
                 return;
             }
 
+            console.log('[WebView] Rendering', sessions.length, 'sessions');
             emptyState.classList.add('hidden');
             
             sessionList.innerHTML = sessions.map(session => {
