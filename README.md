@@ -74,6 +74,13 @@ This extension uses a **Hybrid Agentic Architecture**:
 
 For a deep dive into the internal components (`BridgeServer`, `ContextGatherer`), please read our **[Developer Documentation](DEVELOPMENT.md)**.
 
+## Documentation
+
+For more detailed information, please check the [docs/](docs/) folder:
+- [Architecture Guide](docs/Architecture.md)
+- [Troubleshooting](docs/Troubleshooting.md)
+- [Home](docs/Home.md)
+
 ## Contributing
 
 We welcome contributions! Whether you're fixing bugs, improving the context gathering logic, or adding new bridge capabilities, help us build the future of multi-agent coding.
