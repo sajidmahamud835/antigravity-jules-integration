@@ -2,6 +2,16 @@
 
 This project connects **Google's Jules API** directly to **VS Code** via the Model Context Protocol (MCP), enabling a seamless, AI-powered coding experience.
 
+> [!NOTE]
+> **Compatibility Notice**: This extension currently **requires [Antigravity](https://antigravity.dev)** to function. A standalone VS Code version will be released soon.
+
+### Preview
+
+<div align="center">
+  <img src="../resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
+  <img src="../resources/ui-new-session.png" alt="New Session Wizard" width="45%">
+</div>
+
 ## Key Features
 
 *   **Lazy Loading**: Session logs are fetched only when you need them, saving API quota.

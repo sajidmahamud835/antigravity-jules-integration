@@ -8,7 +8,17 @@
 
 > **🤝 Bridging Local Agents & Cloud AI:** This extension allows your local agents to "phone a friend" by delegating complex, long-running tasks to Jules in the cloud, while maintaining full context of your local workspace.
 
-## Key Features
+> [!NOTE]
+> **Compatibility Notice**: This extension currently **requires [Antigravity](https://antigravity.dev)** to function. A standalone VS Code version will be released soon.
+
+## Screenshots
+
+<div align="center">
+  <img src="resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
+  <img src="resources/ui-new-session.png" alt="New Session Wizard" width="45%">
+</div>
+
+## Features
 
 - **🚀 Two-Way Agent Bridge:** Enable local agents to programmatically start Jules sessions via MCP (Model Context Protocol).
 - **🧠 Automated Context:** Automatically gathers active files, Git diffs, and Antigravity artifacts to give Jules full context without manual uploads.
