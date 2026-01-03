@@ -122,6 +122,11 @@ export function getPanelContent(
             display: flex;
             flex-direction: column;
             gap: 12px;
+            transition: opacity 0.3s ease;
+        }
+
+        .session-list.fade {
+            opacity: 0.5;
         }
 
         .session-card {
@@ -186,6 +191,30 @@ export function getPanelContent(
             color: var(--text-primary);
         }
 
+        .session-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 12px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--vscode-progressBar-background);
+            border-radius: 2px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+
+        .progress-bar-inner {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+
         .thought-signatures {
             border-top: 1px solid var(--border);
             padding-top: 10px;
@@ -199,6 +228,20 @@ export function getPanelContent(
             display: flex;
             align-items: center;
             gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .thought-signatures-header .chevron {
+            transition: transform 0.2s;
+        }
+
+        .thought-signatures.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+
+        .thought-signatures.collapsed .thought-list {
+            display: none;
         }
 
         .thought-list {
@@ -246,12 +289,33 @@ export function getPanelContent(
             height: 48px;
             margin-bottom: 12px;
             opacity: 0.5;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
         }
 
         .empty-state h3 {
             font-size: 14px;
             margin-bottom: 8px;
             color: var(--text-primary);
+        }
+
+        .error-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .error-state h3 {
+            color: var(--error);
+            margin-bottom: 8px;
+        }
+
+        .error-state p {
+            margin-bottom: 16px;
         }
 
         .loading-overlay {
@@ -587,12 +651,16 @@ export function getPanelContent(
 
     <div class="session-list" id="sessionList">
         <div class="empty-state" id="emptyState">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2.25a.75.75 0 01.75.75v3a.75.75 0 01-1.5 0v-3a.75.75 0 01.75-.75zM12 18a.75.75 0 01.75.75v3a.75.75 0 01-1.5 0v-3A.75.75 0 0112 18zM5.106 5.106a.75.75 0 010 1.06l-2.122 2.122a.75.75 0 01-1.06-1.06l2.121-2.121a.75.75 0 011.06 0zM18.894 18.894a.75.75 0 010 1.06l-2.121 2.121a.75.75 0 01-1.06-1.06l2.12-2.122a.75.75 0 011.06 0zM21.75 12a.75.75 0 01-.75.75h-3a.75.75 0 010-1.5h3a.75.75 0 01.75.75zM6 12a.75.75 0 01-.75.75h-3a.75.75 0 010-1.5h3A.75.75 0 016 12zM5.106 18.894a.75.75 0 011.06 0l2.121-2.121a.75.75 0 011.06 1.06l-2.122 2.121a.75.75 0 01-1.06 0zM18.894 5.106a.75.75 0 011.06 0l2.121 2.121a.75.75 0 01-1.06 1.06l-2.121-2.12a.75.75 0 010-1.06z"/>
             </svg>
-            <h3>No Active Sessions</h3>
-            <p>Create a new session to delegate tasks to Jules</p>
+            <h3>Ready for a new mission?</h3>
+            <p>Click the "+ New" button to start a new session with Jules.</p>
+        </div>
+        <div class="error-state hidden" id="errorState">
+            <h3>❌ Failed to Load Sessions</h3>
+            <p id="errorMessage"></p>
+            <button class="btn" id="retryBtn">Retry</button>
         </div>
     </div>
 
@@ -665,6 +733,9 @@ export function getPanelContent(
         // DOM Elements
         const sessionList = document.getElementById('sessionList');
         const emptyState = document.getElementById('emptyState');
+        const errorState = document.getElementById('errorState');
+        const errorMessage = document.getElementById('errorMessage');
+        const retryBtn = document.getElementById('retryBtn');
         const createForm = document.getElementById('createForm');
         const newSessionBtn = document.getElementById('newSessionBtn');
         const cancelCreateBtn = document.getElementById('cancelCreateBtn');
@@ -689,6 +760,9 @@ export function getPanelContent(
         cancelCreateBtn.addEventListener('click', toggleCreateForm);
         submitCreateBtn.addEventListener('click', handleCreateSession);
         refreshBtn.addEventListener('click', () => {
+            vscode.postMessage({ command: 'refreshSessions' });
+        });
+        retryBtn.addEventListener('click', () => {
             vscode.postMessage({ command: 'refreshSessions' });
         });
 
@@ -721,6 +795,7 @@ export function getPanelContent(
             switch (message.type) {
                 case 'sessionsUpdated':
                     console.log('[WebView] Sessions updated, count:', message.sessions?.length || 0);
+                    errorState.classList.add('hidden');
                     sessions = message.sessions || [];
                     thoughtSignatures = new Map(Object.entries(message.thoughtSignatures || {}));
                     renderSessions();
@@ -747,6 +822,12 @@ export function getPanelContent(
                     break;
                 case 'error':
                     console.error('[WebView] Error:', message.message);
+                    if (sessions.length === 0) {
+                        errorMessage.textContent = message.message;
+                        errorState.classList.remove('hidden');
+                        emptyState.classList.add('hidden');
+                        sessionList.innerHTML = '';
+                    }
                     showToast(message.message, 'error');
                     break;
                 case 'success':
@@ -791,25 +872,29 @@ export function getPanelContent(
 
         function renderSessions() {
             console.log('[WebView] renderSessions called, sessions count:', sessions.length);
-            
-            if (sessions.length === 0) {
-                console.log('[WebView] No sessions, showing empty state');
-                sessionList.innerHTML = '';
-                sessionList.appendChild(emptyState);
-                emptyState.classList.remove('hidden');
-                return;
-            }
 
-            console.log('[WebView] Rendering', sessions.length, 'sessions');
-            emptyState.classList.add('hidden');
-            
-            sessionList.innerHTML = sessions.map(session => {
-                const signatures = thoughtSignatures.get(session.id) || [];
-                return createSessionCard(session, signatures);
-            }).join('');
+            sessionList.classList.add('fade');
 
-            // Attach event listeners
-            document.querySelectorAll('.apply-btn').forEach(btn => {
+            setTimeout(() => {
+                if (sessions.length === 0) {
+                    console.log('[WebView] No sessions, showing empty state');
+                    sessionList.innerHTML = '';
+                    sessionList.appendChild(emptyState);
+                    emptyState.classList.remove('hidden');
+                } else {
+                    console.log('[WebView] Rendering', sessions.length, 'sessions');
+                    emptyState.classList.add('hidden');
+
+                    sessionList.innerHTML = sessions.map(session => {
+                        const signatures = thoughtSignatures.get(session.id) || [];
+                        return createSessionCard(session, signatures);
+                    }).join('');
+                }
+
+                sessionList.classList.remove('fade');
+
+                // Attach event listeners
+                document.querySelectorAll('.apply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const sessionId = e.target.dataset.sessionId;
                     vscode.postMessage({ command: 'applyRemoteBranch', sessionId });
@@ -822,28 +907,60 @@ export function getPanelContent(
                     vscode.postMessage({ command: 'cancelSession', sessionId });
                 });
             });
+
+            document.querySelectorAll('.thought-signatures-header').forEach(header => {
+                header.addEventListener('click', (e) => {
+                    const container = e.currentTarget.closest('.thought-signatures');
+                    container.classList.toggle('collapsed');
+                });
+            });
+        }
+
+        function getThoughtIcon(type) {
+            switch (type) {
+                case 'planning': return '📝';
+                case 'executing': return '💻';
+                case 'reviewing': return '🤔';
+                case 'completed': return '🏁';
+                default: return '➡️';
+            }
         }
 
         function createSessionCard(session, signatures) {
             const statusClass = session.status.toLowerCase();
             const isComplete = session.status === 'completed';
             const isRunning = session.status === 'running' || session.status === 'pending';
+            const progress = isComplete ? 100 : (isRunning ? 50 : 0);
+            const statusIcons = {
+                pending: '⏱️',
+                running: '⚙️',
+                completed: '✅',
+                failed: '❌',
+                cancelled: '🚫'
+            };
 
             return \`
                 <div class="session-card">
                     <div class="session-header">
                         <span class="session-id">\${session.id.substring(0, 8)}...</span>
-                        <span class="session-status \${statusClass}">\${session.status}</span>
+                        <span class="session-status \${statusClass}">
+                            \${statusIcons[session.status] || ''} \${session.status}
+                        </span>
                     </div>
                     <div class="session-task">\${escapeHtml(session.task)}</div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-inner" style="width: \${progress}%;"></div>
+                    </div>
                     \${signatures.length > 0 ? \`
-                        <div class="thought-signatures">
+                        <div class="thought-signatures collapsed" data-session-id="\${session.id}">
                             <div class="thought-signatures-header">
+                                <span class="chevron">▼</span>
                                 💭 Thought Signatures (\${signatures.length})
                             </div>
                             <div class="thought-list">
                                 \${signatures.slice(-5).map(sig => \`
                                     <div class="thought-item">
+                                        <span>\${getThoughtIcon(sig.type)}</span>
                                         \${escapeHtml(sig.content)}
                                         <div class="timestamp">\${formatTime(sig.timestamp)}</div>
                                     </div>
@@ -851,6 +968,10 @@ export function getPanelContent(
                             </div>
                         </div>
                     \` : ''}
+                    <div class="session-footer">
+                        <span>Created: \${formatTime(session.createdAt)}</span>
+                        <span>Updated: \${formatTime(session.updatedAt)}</span>
+                    </div>
                     <div class="session-actions">
                         \${isComplete ? \`
                             <button class="btn apply-btn" data-session-id="\${session.id}">
