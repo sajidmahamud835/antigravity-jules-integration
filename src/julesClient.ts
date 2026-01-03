@@ -229,150 +229,82 @@ export class JulesClient {
      * 
      * @param options.pageSize - Number of sessions to fetch (default: 50, max: 100)
      */
-    async getActiveSessions(options?: { pageSize?: number }): Promise<SessionStatus[]> {
-        const LOG_PREFIX = '[JulesClient.getActiveSessions]';
-        console.log(`${LOG_PREFIX} Starting session fetch...`);
+    /**
+     * Execute an API call with exponential backoff for 429 errors.
+     */
+    private async executeWithRetry<T>(
+        operation: () => Promise<T>,
+        retries = 3,
+        baseDelay = 1000
+    ): Promise<T> {
+        let lastError: any;
 
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await operation();
+            } catch (error: any) {
+                lastError = error;
+
+                // Only retry on 429 (Rate Limit) or 503 (Service Unavailable)
+                const isRateLimit = error instanceof JulesApiError && error.statusCode === 429;
+                const isServiceError = error instanceof JulesApiError && error.statusCode === 503;
+
+                if (!isRateLimit && !isServiceError) {
+                    throw error;
+                }
+
+                if (i === retries - 1) break;
+
+                // Exponential backoff with jitter
+                const delay = baseDelay * Math.pow(2, i) + (Math.random() * 1000);
+                console.warn(`[JulesClient] Rate limit hit. Retrying in ${Math.round(delay)}ms (Attempt ${i + 1}/${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        throw lastError;
+    }
+
+    /**
+     * Get all sessions from Jules API (including completed/old sessions).
+     */
+    async getActiveSessions(options?: { pageSize?: number }): Promise<SessionStatus[]> {
         const apiKey = await getApiKey();
         if (!apiKey) {
-            console.warn(`${LOG_PREFIX} No API key available, returning cached sessions`);
-            console.log(`${LOG_PREFIX} Cached session count: ${this._activeSessions.size}`);
             return Array.from(this._activeSessions.values());
         }
 
         const pageSize = options?.pageSize || 50;
-        console.log(`${LOG_PREFIX} API key present, fetching with pageSize=${pageSize}`);
 
-        // Try multiple methods to fetch sessions
-        let sessions: SessionStatus[] = [];
-
-        // Method 1: Standard GET with pageSize
         try {
-            console.log(`${LOG_PREFIX} [Method 1] Trying standard GET with pageSize...`);
-            sessions = await this._fetchSessionsMethod1(apiKey, pageSize);
-            if (sessions.length > 0) {
-                console.log(`${LOG_PREFIX} [Method 1] SUCCESS - Found ${sessions.length} sessions`);
+            return await this.executeWithRetry(async () => {
+                const url = new URL(API_CONFIG.BASE_URL);
+                url.searchParams.set('pageSize', String(Math.min(pageSize, 100)));
+
+                const response = await fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new JulesApiError(`API returned ${response.status}`, response.status, errorText);
+                }
+
+                const data = await response.json() as { sessions?: JulesApiSession[] };
+                const sessions = (data.sessions || []).map(s => this.parseApiSession(s));
+
                 this._updateCache(sessions);
                 return sessions;
-            }
-            console.log(`${LOG_PREFIX} [Method 1] Returned empty array, trying next method...`);
+            });
         } catch (error) {
-            console.error(`${LOG_PREFIX} [Method 1] FAILED:`, error);
+            console.error('[JulesClient] Failed to fetch sessions:', error);
+            // Return cached sessions on failure to keep UI usable
+            return Array.from(this._activeSessions.values());
         }
-
-        // Method 2: Simple GET without parameters
-        try {
-            console.log(`${LOG_PREFIX} [Method 2] Trying simple GET without params...`);
-            sessions = await this._fetchSessionsMethod2(apiKey);
-            if (sessions.length > 0) {
-                console.log(`${LOG_PREFIX} [Method 2] SUCCESS - Found ${sessions.length} sessions`);
-                this._updateCache(sessions);
-                return sessions;
-            }
-            console.log(`${LOG_PREFIX} [Method 2] Returned empty array, trying next method...`);
-        } catch (error) {
-            console.error(`${LOG_PREFIX} [Method 2] FAILED:`, error);
-        }
-
-        // Method 3: Return cached sessions
-        console.log(`${LOG_PREFIX} [Method 3] All API methods failed, returning cached sessions`);
-        console.log(`${LOG_PREFIX} Cached session count: ${this._activeSessions.size}`);
-        return Array.from(this._activeSessions.values());
-    }
-
-    /**
-     * Method 1: Fetch sessions with pageSize parameter
-     */
-    private async _fetchSessionsMethod1(apiKey: string, pageSize: number): Promise<SessionStatus[]> {
-        const LOG_PREFIX = '[JulesClient._fetchSessionsMethod1]';
-
-        const url = new URL(API_CONFIG.BASE_URL);
-        url.searchParams.set('pageSize', String(Math.min(pageSize, 100)));
-
-        console.log(`${LOG_PREFIX} Fetching from: ${url.toString()}`);
-
-        const response = await fetch(url.toString(), {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Goog-Api-Key': apiKey
-            }
-        });
-
-        console.log(`${LOG_PREFIX} Response status: ${response.status} ${response.statusText}`);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`${LOG_PREFIX} Error response body:`, errorText);
-            throw new Error(`API returned ${response.status}: ${errorText}`);
-        }
-
-        const rawData = await response.text();
-        console.log(`${LOG_PREFIX} Raw response (first 500 chars):`, rawData.substring(0, 500));
-
-        const data = JSON.parse(rawData) as {
-            sessions?: JulesApiSession[];
-            nextPageToken?: string;
-        };
-
-        console.log(`${LOG_PREFIX} Parsed data keys:`, Object.keys(data));
-        console.log(`${LOG_PREFIX} Sessions array length:`, data.sessions?.length || 0);
-
-        if (data.sessions && data.sessions.length > 0) {
-            console.log(`${LOG_PREFIX} First session sample:`, JSON.stringify(data.sessions[0], null, 2));
-        }
-
-        const sessions = data.sessions || [];
-        return sessions.map(s => this.parseApiSession(s));
-    }
-
-    /**
-     * Method 2: Simple GET without any parameters
-     */
-    private async _fetchSessionsMethod2(apiKey: string): Promise<SessionStatus[]> {
-        const LOG_PREFIX = '[JulesClient._fetchSessionsMethod2]';
-
-        console.log(`${LOG_PREFIX} Fetching from: ${API_CONFIG.BASE_URL}`);
-
-        const response = await fetch(API_CONFIG.BASE_URL, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Goog-Api-Key': apiKey
-            }
-        });
-
-        console.log(`${LOG_PREFIX} Response status: ${response.status} ${response.statusText}`);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`${LOG_PREFIX} Error response body:`, errorText);
-            throw new Error(`API returned ${response.status}: ${errorText}`);
-        }
-
-        const rawData = await response.text();
-        console.log(`${LOG_PREFIX} Raw response (first 500 chars):`, rawData.substring(0, 500));
-
-        const data = JSON.parse(rawData);
-        console.log(`${LOG_PREFIX} Parsed data keys:`, Object.keys(data));
-
-        // Try to find sessions in various possible response formats
-        let sessionsArray: JulesApiSession[] = [];
-
-        if (Array.isArray(data)) {
-            console.log(`${LOG_PREFIX} Response is an array with ${data.length} items`);
-            sessionsArray = data;
-        } else if (data.sessions) {
-            console.log(`${LOG_PREFIX} Found 'sessions' key with ${data.sessions.length} items`);
-            sessionsArray = data.sessions;
-        } else if (data.items) {
-            console.log(`${LOG_PREFIX} Found 'items' key with ${data.items.length} items`);
-            sessionsArray = data.items;
-        } else {
-            console.log(`${LOG_PREFIX} Could not find sessions in response`);
-        }
-
-        return sessionsArray.map(s => this.parseApiSession(s));
     }
 
     /**
@@ -395,7 +327,7 @@ export class JulesClient {
         for (const [id, session] of this._activeSessions) {
             if (!apiSessionIds.has(id)) {
                 // This session exists locally but not in API yet (just created)
-                console.log(`${LOG_PREFIX} Preserving local-only session: ${id}`);
+                // console.log(`${LOG_PREFIX} Preserving local-only session: ${id}`); // Verbose
                 localOnlySessions.push(session);
             }
         }
@@ -483,26 +415,32 @@ export class JulesClient {
         if (!apiKey) return [];
 
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/${sessionId}/activities`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': apiKey
+            return await this.executeWithRetry(async () => {
+                const response = await fetch(`${API_CONFIG.BASE_URL}/${sessionId}/activities`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    // Return empty on 404 (session might be too new or invalid)
+                    if (response.status === 404) return [];
+                    throw new JulesApiError(`API returned ${response.status}`, response.status);
                 }
+
+                const data = await response.json() as { activities?: JulesActivity[] };
+                const activities = data.activities || [];
+
+                return activities.map(a => ({
+                    id: a.name?.split('/').pop() || 'unknown',
+                    sessionId,
+                    content: a.description || a.type || 'Activity',
+                    timestamp: a.createTime || new Date().toISOString(),
+                    type: this.mapActivityType(a.type)
+                }));
             });
-
-            if (!response.ok) return [];
-
-            const data = await response.json() as { activities?: JulesActivity[] };
-            const activities = data.activities || [];
-
-            return activities.map(a => ({
-                id: a.name?.split('/').pop() || 'unknown',
-                sessionId,
-                content: a.description || a.type || 'Activity',
-                timestamp: a.createTime || new Date().toISOString(),
-                type: this.mapActivityType(a.type)
-            }));
         } catch (error) {
             console.warn('Error fetching activities:', error);
             return [];

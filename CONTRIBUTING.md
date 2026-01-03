@@ -1,6 +1,13 @@
 # Contributing to Jules for Antigravity
 
-Thank you for your interest in contributing! We want to make it easy for you to help improve the bridge between local agents and Jules.
+Thank you for your interest in## Contributing
+
+We welcome contributions! Please follow our development workflow:
+
+1.  **Read the Guide**: Check `DEVELOPMENT.md` for architecture details and coding conventions.
+2.  **Fork & Branch**: Create a feature branch for your work.
+3.  **Test**: Ensure your changes compile and pass basic verification.
+4.  **Submit PR**: Pull requests should be descriptive and reference any related issues.ween local agents and Jules.
 
 ## Getting Started
 

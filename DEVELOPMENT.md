@@ -1,79 +1,44 @@
-# Developer Documentation
+# Development Guide
 
-This document outlines the internal architecture of `antigravity-jules-integration`. 
-
-> **New to the project?** Start with the **[Contribution Guide](CONTRIBUTING.md)**.
-> **Just want to use it?** See the **[User Guide](README.md)**.
+This document provides an overview of the architecture and workflows for developing the **Antigravity Jules Integration** extension.
 
 ## Architecture
 
-The extension is built on a modular architecture designed for security, maintainability, and extensibility.
+The extension is built with a clear separation of concerns:
 
-```mermaid
-graph TD
-    UI[Jules Panel UI] -->|Start Session| Ext[Extension Host]
-    Ext -->|Gather Context| CG[Context Gatherer]
-    CG -->|Read| VS[VS Code Editors]
-    CG -->|Diff| Git[Git Repo]
-    CG -->|Read| Art[Antigravity Artifacts]
-    Ext -->|Create Session| API[Jules API]
-    API -->|Session ID| UI
-```
+-   **`src/julesClient.ts`**: The API Client layer. Handles all direct communication with the Google Jules API.
+    -   *Key Pattern:* All API calls should be wrapped in `executeWithRetry` to handle rate limits (`429`) and transient errors (`503`).
+-   **`src/panels/JulesPanel.ts`**: The Controller layer. Manages the Webview Panel state, polling logic, and message routing.
+    -   *Key Logic:* Implements "Lazy Loading". The polling loop only fetches session status. Detailed logs (thought signatures) are fetched via `_handleGetThoughtSignatures` only when requested by the UI.
+-   **`src/panels/panelContent.ts`**: The View layer. Generates the HTML/CSS/JS for the Webview.
+    -   *Key Logic:* Uses vanilla JS for lightweight interactivity. Sends messages (commands) to the extension host for actions like `createSession` or `getThoughtSignatures`.
 
-### 1. Core Components
+## Adding New Features
 
-- **`extension.ts`**: Entry point. Orchestrates component initialization and wiring.
-- **`JulesPanel.ts`**: `WebviewViewProvider` that manages the React-like HTML UI and handles message passing.
-- **`julesClient.ts`**: Robust HTTP client for the Jules API. Handles retries, timeouts, and error sanitization.
-- **`ContextGatherer.ts`**: Automates context collection from VS Code (editors, git, artifacts).
-- **`BridgeServer.ts`**: MCP (Model Context Protocol) server that allows local Antigravity agents to delegate tasks to Jules.
+1.  **UI Updates (`panelContent.ts`)**:
+    -   Modify the `getPanelContent` function to add new HTML elements.
+    -   Add event listeners in the `<script>` section to post messages to the backend.
+    -   Handle new message types in the `window.addEventListener('message', ...)` block.
 
-### 2. Context Automation Flow
+2.  **Controller Logic (`JulesPanel.ts`)**:
+    -   Add a handler for the new message in `_handleWebviewMessage`.
+    -   Implement the logic (e.g., calling the API client).
+    -   Post a success/error message back to the Webview.
 
-When a user starts a session:
-1. `JulesPanel` receives the "createSession" message.
-2. `ContextGatherer` is invoked:
-   - Reads active editor content & cursor position.
-   - Runs `git diff` to capture uncommitted changes.
-   - Reads `task.md` and `implementation_plan.md` from `~/.gemini/antigravity`.
-   - Collects active compilation errors (diagnostics).
-3. `ContextGatherer` compiles this into an XML prompt.
-4. `JulesClient` sends the XML prompt to `https://jules.googleapis.com/v1alpha/sessions`.
+3.  **API Interaction (`julesClient.ts`)**:
+    -   Add new methods for API endpoints.
+    -   Always use `executeWithRetry` for robustness.
 
-### 3. MCP Integration ("The Bridge")
+## Conventions
 
-The extension exposes a local MCP server (`jules-bridge`) via Stdio.
-- **Tool**: `delegate_to_jules`
-- **Arguments**: `task` (string)
-- **Function**: Allows OTHER agents (like the Antigravity Chatbot) to programmatically start Jules sessions.
-- **Implementation**: `BridgeServer.ts` reuses the `ContextGatherer` to ensure agents get the same rich context as human users.
+-   **Logging**: Use `console.log` sparingly. Prefix logs with the class/method name (e.g., `[JulesPanel]`).
+-   **Error Handling**: Never crush the extension process. Catch errors, log them, and send a user-friendly error message to the Webview.
+-   **State Management**: The `JulesPanel` is the source of truth for session data. The Webview is a render target.
 
-## Folder Structure
+## Workflow
 
-```
-src/
-├── context/         # Context gathering logic
-│   └── ContextGatherer.ts
-├── mcp/             # MCP Server & Bridge implementation
-│   ├── BridgeServer.ts
-│   └── registration.ts
-├── panels/          # Webview UI
-│   ├── JulesPanel.ts
-│   └── panelContent.ts
-├── extension.ts     # Entry point
-├── julesClient.ts   # API Client
-├── gitContext.ts    # Legacy Git helpers (to be deprecated)
-├── secrets.ts       # Secure storage wrapper
-└── antigravityDetector.ts
-```
-
-## Build & Test
-
-- **Compile**: `npm run compile`
-- **Package**: `npx vsce package`
-- **Install**: Extract VSIX to `~/.antigravity/extensions/`
-
-## Troubleshooting
-
-- **404 Errors**: Check `julesClient.ts` endpoint `BASE_URL`. Ensure repo is installed in Jules App.
-- **Registration Errors**: Ensure `antigravity.mcpServers` setting is NOT accessed directly (use file-based config).
+1.  Create a feature branch.
+2.  Implement changes.
+3.  Run `npm run compile` to catch TypeScript errors.
+4.  Debug using the "Extension Development Host".
+5.  Submit a Pull Request.

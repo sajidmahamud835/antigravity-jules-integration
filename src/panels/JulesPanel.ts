@@ -102,6 +102,29 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                     vscode.env.openExternal(vscode.Uri.parse(message.url));
                 }
                 break;
+            case 'getThoughtSignatures':
+                if (message.sessionId) {
+                    await this._handleGetThoughtSignatures(message.sessionId);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Fetch thought signatures for a specific session (Lazy Loading).
+     */
+    private async _handleGetThoughtSignatures(sessionId: string): Promise<void> {
+        try {
+            const signatures = await this._julesClient.getThoughtSignatures(sessionId);
+
+            this._postMessage({
+                type: 'thoughtSignaturesUpdated',
+                sessionId,
+                signatures
+            });
+        } catch (error) {
+            console.error('[JulesPanel] Failed to fetch signatures:', error);
+            // Non-critical error, just log it
         }
     }
 
@@ -246,27 +269,18 @@ export class JulesPanel implements vscode.WebviewViewProvider {
      */
     private async _refreshSessions(): Promise<void> {
         const LOG = '[JulesPanel._refreshSessions]';
-        console.log(`${LOG} Starting refresh...`);
+        // console.log(`${LOG} Starting refresh...`);
 
         try {
             const sessions = await this._julesClient.getActiveSessions();
-            console.log(`${LOG} Got ${sessions.length} sessions from client`);
 
-            const thoughtSignatures = await this._getThoughtSignatures(sessions);
+            // OPTIMIZATION: Do NOT fetch thought signatures for all sessions here.
+            // They will be lazy-loaded by the UI when requested.
 
-            // Convert Map to plain object for serialization
-            const signaturesObject: Record<string, any[]> = {};
-            thoughtSignatures.forEach((value, key) => {
-                signaturesObject[key] = value;
-            });
-
-            console.log(`${LOG} Sending sessionsUpdated message with ${sessions.length} sessions`);
             this._postMessage({
                 type: 'sessionsUpdated',
-                sessions,
-                thoughtSignatures: signaturesObject
+                sessions
             });
-            console.log(`${LOG} Refresh complete`);
         } catch (error) {
             console.error(`${LOG} Error:`, error);
             this._postMessage({
@@ -274,26 +288,6 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                 message: `Failed to refresh sessions: ${error}`
             });
         }
-    }
-
-    /**
-     * Get thought signatures for all sessions.
-     */
-    private async _getThoughtSignatures(
-        sessions: SessionStatus[]
-    ): Promise<Map<string, ThoughtSignature[]>> {
-        const signatures = new Map<string, ThoughtSignature[]>();
-
-        for (const session of sessions) {
-            try {
-                const sessionSignatures = await this._julesClient.getThoughtSignatures(session.id);
-                signatures.set(session.id, sessionSignatures);
-            } catch {
-                signatures.set(session.id, []);
-            }
-        }
-
-        return signatures;
     }
 
     /**
@@ -396,7 +390,7 @@ export class JulesPanel implements vscode.WebviewViewProvider {
 }
 
 interface WebviewMessage {
-    command: 'createSession' | 'refreshSessions' | 'applyRemoteBranch' | 'cancelSession' | 'checkRepoAccess' | 'openExternalUrl';
+    command: 'createSession' | 'refreshSessions' | 'applyRemoteBranch' | 'cancelSession' | 'checkRepoAccess' | 'openExternalUrl' | 'getThoughtSignatures';
     task?: string;
     contextFiles?: string[];
     sessionId?: string;
@@ -407,11 +401,13 @@ interface WebviewMessage {
 }
 
 interface ExtensionMessage {
-    type: 'sessionsUpdated' | 'sessionCreated' | 'loading' | 'error' | 'success' | 'showRepoSetupWizard' | 'repoAccessGranted' | 'repoAccessStillDenied';
+    type: 'sessionsUpdated' | 'sessionCreated' | 'loading' | 'error' | 'success' | 'showRepoSetupWizard' | 'repoAccessGranted' | 'repoAccessStillDenied' | 'thoughtSignaturesUpdated';
     sessions?: SessionStatus[];
     session?: SessionStatus;
     // Using Record instead of Map - Maps don't serialize properly over postMessage
-    thoughtSignatures?: Record<string, ThoughtSignature[]>;
+    thoughtSignatures?: Record<string, ThoughtSignature[]> | ThoughtSignature[];
+    sessionId?: string;
+    signatures?: ThoughtSignature[];
     loading?: boolean;
     message?: string;
     owner?: string;

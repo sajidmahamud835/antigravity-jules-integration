@@ -797,12 +797,32 @@ export function getPanelContent(
                     console.log('[WebView] Sessions updated, count:', message.sessions?.length || 0);
                     errorState.classList.add('hidden');
                     sessions = message.sessions || [];
-                    thoughtSignatures = new Map(Object.entries(message.thoughtSignatures || {}));
+                    // Keep existing signatures, don't overwrite with empty
                     renderSessions();
+                    break;
+                case 'thoughtSignaturesUpdated':
+                    console.log('[WebView] Signatures updated for:', message.sessionId);
+                    thoughtSignatures.set(message.sessionId, message.signatures || []);
+                    // Re-render to show the new signatures
+                    renderSessions();
+                    
+                    // Auto-expand the one we just loaded
+                    setTimeout(() => {
+                        const header = document.querySelector(\`.thought-signatures[data-session-id="\${message.sessionId}"] .thought-signatures-header\`);
+                        const container = document.querySelector(\`.thought-signatures[data-session-id="\${message.sessionId}"]\`);
+                        if (header && container) {
+                            container.classList.remove('collapsed');
+                            header.classList.remove('loading');
+                            const spinner = header.querySelector('.mini-spinner');
+                            if (spinner) {
+                                spinner.remove();
+                            }
+                        }
+                    }, 50);
                     break;
                 case 'sessionCreated':
                     console.log('[WebView] Session created:', message.session);
-                    // CRITICAL FIX: Add the new session to local state immediately
+                    // Add the new session to local state immediately
                     if (message.session) {
                         // Check if session already exists (avoid duplicates)
                         const existingIndex = sessions.findIndex(s => s.id === message.session.id);
@@ -819,6 +839,9 @@ export function getPanelContent(
                     break;
                 case 'loading':
                     setLoading(message.loading);
+                    // Also disable buttons
+                    const allBtns = document.querySelectorAll('.btn');
+                    allBtns.forEach(btn => btn.disabled = message.loading);
                     break;
                 case 'error':
                     console.error('[WebView] Error:', message.message);
@@ -829,6 +852,7 @@ export function getPanelContent(
                         sessionList.innerHTML = '';
                     }
                     showToast(message.message, 'error');
+                    setLoading(false); // Ensure loading is cleared on error
                     break;
                 case 'success':
                     showToast(message.message, 'success');
@@ -871,30 +895,28 @@ export function getPanelContent(
         }
 
         function renderSessions() {
-            console.log('[WebView] renderSessions called, sessions count:', sessions.length);
+            // sessionList.classList.add('fade'); // Removed fade to reduce flickering during polling
 
-            sessionList.classList.add('fade');
+            if (sessions.length === 0) {
+                sessionList.innerHTML = '';
+                sessionList.appendChild(emptyState);
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
 
-            setTimeout(() => {
-                if (sessions.length === 0) {
-                    console.log('[WebView] No sessions, showing empty state');
-                    sessionList.innerHTML = '';
-                    sessionList.appendChild(emptyState);
-                    emptyState.classList.remove('hidden');
-                } else {
-                    console.log('[WebView] Rendering', sessions.length, 'sessions');
-                    emptyState.classList.add('hidden');
+                sessionList.innerHTML = sessions.map(session => {
+                    // Check if we have signatures loaded
+                    const signatures = thoughtSignatures.get(session.id);
+                    const hasSignatures = signatures && signatures.length > 0;
+                    // Pass explicit undefined if not loaded yet
+                    return createSessionCard(session, signatures); 
+                }).join('');
+            }
 
-                    sessionList.innerHTML = sessions.map(session => {
-                        const signatures = thoughtSignatures.get(session.id) || [];
-                        return createSessionCard(session, signatures);
-                    }).join('');
-                }
+            // sessionList.classList.remove('fade');
 
-                sessionList.classList.remove('fade');
-
-                // Attach event listeners
-                document.querySelectorAll('.apply-btn').forEach(btn => {
+            // Attach event listeners
+            document.querySelectorAll('.apply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const sessionId = e.target.dataset.sessionId;
                     vscode.postMessage({ command: 'applyRemoteBranch', sessionId });
@@ -909,11 +931,40 @@ export function getPanelContent(
             });
 
             document.querySelectorAll('.thought-signatures-header').forEach(header => {
-                header.addEventListener('click', (e) => {
-                    const container = e.currentTarget.closest('.thought-signatures');
-                    container.classList.toggle('collapsed');
-                });
+                header.addEventListener('click', handleSignatureToggle);
             });
+        }
+
+        function handleSignatureToggle(e) {
+            const header = e.currentTarget;
+            const container = header.closest('.thought-signatures');
+            const sessionId = container.dataset.sessionId;
+            const isLoaded = container.dataset.loaded === 'true';
+
+            if (container.classList.contains('collapsed')) {
+                // Expanding
+                if (!isLoaded) {
+                    // Load data first
+                    header.classList.add('loading');
+                    // Add spinner
+                    const spinnerObj = document.createElement('span');
+                    spinnerObj.className = 'mini-spinner';
+                    header.appendChild(spinnerObj);
+
+                     vscode.postMessage({ 
+                        command: 'getThoughtSignatures', 
+                        sessionId 
+                    });
+                    
+                    // Mark as loaded effectively immediately to prevent double-fetch while waiting
+                    // (Real logic handles the update via message)
+                } else {
+                    container.classList.remove('collapsed');
+                }
+            } else {
+                // Collapsing
+                container.classList.add('collapsed');
+            }
         }
 
         function getThoughtIcon(type) {
@@ -939,9 +990,14 @@ export function getPanelContent(
                 cancelled: '🚫'
             };
             
-            // Safe ID display (Merged Fix)
+            // Safe ID display
             const safeId = (session.id || 'unknown').toString();
             const displayId = safeId.length > 8 ? safeId.substring(0, 8) + '...' : safeId;
+
+            // Determine thought section state
+            const isLoaded = Array.isArray(signatures);
+            const signatureCount = isLoaded ? signatures.length : '?';
+            const sigs = isLoaded ? signatures : [];
 
             return \`
                 <div class="session-card">
@@ -955,23 +1011,24 @@ export function getPanelContent(
                     <div class="progress-bar">
                         <div class="progress-bar-inner" style="width: \${progress}%;"></div>
                     </div>
-                    \${signatures.length > 0 ? \`
-                        <div class="thought-signatures collapsed" data-session-id="\${session.id}">
-                            <div class="thought-signatures-header">
-                                <span class="chevron">▼</span>
-                                💭 Thought Signatures (\${signatures.length})
-                            </div>
-                            <div class="thought-list">
-                                \${signatures.slice(-5).map(sig => \`
-                                    <div class="thought-item">
-                                        <span>\${getThoughtIcon(sig.type)}</span>
-                                        \${escapeHtml(sig.content)}
-                                        <div class="timestamp">\${formatTime(sig.timestamp)}</div>
-                                    </div>
-                                \`).join('')}
-                            </div>
+                    
+                    <div class="thought-signatures collapsed" data-session-id="\${session.id}" data-loaded="\${isLoaded}">
+                        <div class="thought-signatures-header">
+                            <span class="chevron">▼</span>
+                            💭 Thought Signatures (\${signatureCount})
                         </div>
-                    \` : ''}
+                        <div class="thought-list">
+                            \${isLoaded && sigs.length === 0 ? '<div class="thought-item" style="font-style:italic; color:var(--text-secondary)">No thoughts yet...</div>' : ''}
+                            \${sigs.slice(-5).map(sig => \`
+                                <div class="thought-item">
+                                    <span>\${getThoughtIcon(sig.type)}</span>
+                                    \${escapeHtml(sig.content)}
+                                    <div class="timestamp">\${formatTime(sig.timestamp)}</div>
+                                </div>
+                            \`).join('')}
+                        </div>
+                    </div>
+                    
                     <div class="session-footer">
                         <span>Created: \${formatTime(session.createdAt)}</span>
                         <span>Updated: \${formatTime(session.updatedAt)}</span>
