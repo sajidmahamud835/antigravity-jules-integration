@@ -369,19 +369,44 @@ export class JulesClient {
     }
 
     /**
-     * Update local cache with fetched sessions
+     * Update local cache with fetched sessions.
+     * IMPORTANT: If API returns empty but we have local sessions, merge them instead of overwriting.
      */
     private _updateCache(sessions: SessionStatus[]): void {
+        const LOG_PREFIX = '[JulesClient._updateCache]';
+
+        // CRITICAL FIX: Don't overwrite local sessions with empty API response
+        if (sessions.length === 0 && this._activeSessions.size > 0) {
+            console.warn(`${LOG_PREFIX} API returned empty but we have ${this._activeSessions.size} local sessions - keeping cache`);
+            return;
+        }
+
+        // Merge: Keep local sessions that aren't in API response (recently created)
+        const apiSessionIds = new Set(sessions.map(s => s.id));
+        const localOnlySessions: SessionStatus[] = [];
+
+        for (const [id, session] of this._activeSessions) {
+            if (!apiSessionIds.has(id)) {
+                // This session exists locally but not in API yet (just created)
+                console.log(`${LOG_PREFIX} Preserving local-only session: ${id}`);
+                localOnlySessions.push(session);
+            }
+        }
+
+        // Combine API sessions with local-only sessions
+        const allSessions = [...sessions, ...localOnlySessions];
+
         // Sort by creation date (newest first)
-        sessions.sort((a, b) =>
+        allSessions.sort((a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
         this._activeSessions.clear();
-        for (const session of sessions) {
+        for (const session of allSessions) {
             this._activeSessions.set(session.id, session);
         }
-        console.log(`[JulesClient._updateCache] Updated cache with ${sessions.length} sessions`);
+
+        console.log(`${LOG_PREFIX} Updated cache: ${sessions.length} from API + ${localOnlySessions.length} local = ${allSessions.length} total`);
     }
 
     /**

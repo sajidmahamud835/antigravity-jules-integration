@@ -713,14 +713,29 @@ export function getPanelContent(
         // Message Handler
         window.addEventListener('message', event => {
             const message = event.data;
+            console.log('[WebView] Received message:', message.type, message);
             
             switch (message.type) {
                 case 'sessionsUpdated':
+                    console.log('[WebView] Sessions updated, count:', message.sessions?.length || 0);
                     sessions = message.sessions || [];
                     thoughtSignatures = new Map(Object.entries(message.thoughtSignatures || {}));
                     renderSessions();
                     break;
                 case 'sessionCreated':
+                    console.log('[WebView] Session created:', message.session);
+                    // CRITICAL FIX: Add the new session to local state immediately
+                    if (message.session) {
+                        // Check if session already exists (avoid duplicates)
+                        const existingIndex = sessions.findIndex(s => s.id === message.session.id);
+                        if (existingIndex === -1) {
+                            sessions.unshift(message.session); // Add to beginning (newest first)
+                            console.log('[WebView] Added session to local state, total:', sessions.length);
+                            renderSessions();
+                        } else {
+                            console.log('[WebView] Session already exists at index:', existingIndex);
+                        }
+                    }
                     showToast('Session created successfully', 'success');
                     toggleCreateForm();
                     break;
@@ -728,6 +743,7 @@ export function getPanelContent(
                     setLoading(message.loading);
                     break;
                 case 'error':
+                    console.error('[WebView] Error:', message.message);
                     showToast(message.message, 'error');
                     break;
                 case 'success':
