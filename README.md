@@ -29,8 +29,8 @@
 
 - **🚀 Two-Way Agent Bridge:** Enable local agents to programmatically start Jules sessions via MCP (Model Context Protocol).
 - **🧠 Automated Context:** Automatically gathers active files, Git diffs, and Antigravity artifacts to give Jules full context without manual uploads.
-- **Lazy Loading**: Efficiently loads session logs on-demand to save bandwidth and API quota.
-- **Robust Quota Management**: Intelligent retry logic with exponential backoff handles API rate limits automatically.
+- **⚡ Lazy Loading:** Efficiently loads session logs on-demand to save bandwidth and API quota.
+- **🚦 Robust Quota Management:** Intelligent retry logic with exponential backoff handles API rate limits automatically.
 - **🔄 Bi-Directional Sync:** View Jules' thought process in real-time and apply changes directly to your local Git branch.
 - **🛡️ Secure:** Uses VS Code Secret Storage for API keys and sanitizes all error messages.
 

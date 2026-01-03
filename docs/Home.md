@@ -14,10 +14,10 @@ This project connects **Google's Jules API** directly to **VS Code** via the Mod
 
 ## Key Features
 
-*   **Lazy Loading**: Session logs are fetched only when you need them, saving API quota.
-*   **Robust Retry Logic**: Automatically handles `429` rate limits with exponential backoff.
-*   **Context Awareness**: Automatically gathers file context and git diffs for Jules.
-*   **Two-Way Sync**: Apply AI suggestions directly to your local codebase.
+*   **⚡ Lazy Loading**: Session logs are fetched only when you need them, saving API quota.
+*   **🚦 Robust Retry Logic**: Automatically handles `429` rate limits with exponential backoff.
+*   **🧠 Context Awareness**: Automatically gathers file context and git diffs for Jules.
+*   **🔄 Two-Way Sync**: Apply AI suggestions directly to your local codebase.
 
 ## Navigation
 
