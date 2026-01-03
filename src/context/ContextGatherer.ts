@@ -269,7 +269,7 @@ ${workspaceContext}</workspace_context>
      * Parse GitHub URL to extract owner and repo name.
      */
     private parseGithubUrl(url: string): { owner: string; name: string } {
-        const regex = /(?:git@|https:\/\/)(?:[\w\.@]+)[\/:]([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(?:\.git)?$/;
+        const regex = new RegExp('(?:git@|https://)(?:[\\w.@]+)[/:]([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\\.git)?$');
         const match = url.match(regex);
         if (!match) {
             throw new Error(`Could not parse Git Remote URL: ${url}`);

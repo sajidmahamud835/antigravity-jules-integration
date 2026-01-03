@@ -123,9 +123,9 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             const fullPrompt = this._contextGatherer.generatePrompt(context, missionBrief);
 
             // 3. Determine best repository context
-            let owner = context.gitContext?.owner;
-            let repo = context.gitContext?.repo;
-            let branch = context.gitContext?.branch || 'main';
+            const owner = context.gitContext?.owner;
+            const repo = context.gitContext?.repo;
+            const branch = context.gitContext?.branch || 'main';
 
             // Validate git context exists and is valid
             if (!owner || !repo) {

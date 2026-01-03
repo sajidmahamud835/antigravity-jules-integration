@@ -206,7 +206,7 @@ ${workspaceContext}</workspace_context>
      * Parse GitHub URL.
      */
     private parseGithubUrl(url: string): { owner: string; name: string } {
-        const regex = /(?:git@|https:\/\/)(?:[\w\.@]+)[\/:]([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(?:\.git)?$/;
+        const regex = new RegExp('(?:git@|https://)(?:[\\w.@]+)[/:]([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\\.git)?$');
         const match = url.match(regex);
         if (!match) {
             throw new Error(`Could not parse Git Remote URL: ${url}`);
@@ -244,11 +244,15 @@ ${workspaceContext}</workspace_context>
 
                 try {
                     artifacts.taskMd = await fs.readFile(path.join(contextPath, 'task.md'), 'utf-8');
-                } catch { }
+                } catch {
+                    // File might not exist
+                }
 
                 try {
                     artifacts.implementationPlan = await fs.readFile(path.join(contextPath, 'implementation_plan.md'), 'utf-8');
-                } catch { }
+                } catch {
+                    // File might not exist
+                }
             }
         } catch (error) {
             this.log(`Error reading artifacts: ${error}`);

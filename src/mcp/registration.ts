@@ -24,7 +24,7 @@ export async function registerBridgeServer(
         outputChannel.appendLine(`Config path: ${configPath}`);
 
         // Load or create config
-        let config = await loadConfig(configPath);
+        const config = await loadConfig(configPath);
 
         // Get API Key securely
         let apiKey: string | undefined;
