@@ -217,18 +217,26 @@ export class JulesClient {
     }
 
     /**
-     * Get all active sessions from Jules API.
+     * Get all sessions from Jules API (including completed/old sessions).
      * Fetches real session data and syncs with local cache.
+     * @param options.pageSize - Number of sessions to fetch (default: 50, max: 100)
+     * @param options.includeCompleted - Whether to include completed sessions (default: true)
      */
-    async getActiveSessions(): Promise<SessionStatus[]> {
+    async getActiveSessions(options?: { pageSize?: number; includeCompleted?: boolean }): Promise<SessionStatus[]> {
         const apiKey = await getApiKey();
         if (!apiKey) {
             // Return cached sessions if no API key
             return Array.from(this._activeSessions.values());
         }
 
+        const pageSize = options?.pageSize || 50;
+
         try {
-            const response = await fetch(API_CONFIG.BASE_URL, {
+            // Build URL with query parameters for pagination
+            const url = new URL(API_CONFIG.BASE_URL);
+            url.searchParams.set('pageSize', String(Math.min(pageSize, 100)));
+
+            const response = await fetch(url.toString(), {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -241,11 +249,19 @@ export class JulesClient {
                 return Array.from(this._activeSessions.values());
             }
 
-            const data = await response.json() as { sessions?: JulesApiSession[] };
+            const data = await response.json() as {
+                sessions?: JulesApiSession[];
+                nextPageToken?: string;
+            };
             const sessions = data.sessions || [];
 
             // Parse API response into SessionStatus format
             const parsedSessions: SessionStatus[] = sessions.map(s => this.parseApiSession(s));
+
+            // Sort by creation date (newest first)
+            parsedSessions.sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
 
             // Update local cache
             this._activeSessions.clear();
