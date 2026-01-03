@@ -917,7 +917,24 @@ export function getPanelContent(
 
         // Initial state
         renderSessions();
+
+        // DIAGNOSTIC: Global test function - call window.testJulesAPI() from console
+        window.testJulesAPI = async function() {
+            console.log('='.repeat(60));
+            console.log('TESTING JULES API');
+            console.log('='.repeat(60));
+            
+            // Request API key from extension
+            console.log('Requesting extension to test API...');
+            vscode.postMessage({ command: 'refreshSessions' });
+            
+            console.log('Check Extension Host Console for API logs');
+            console.log('Also check Network tab for API calls');
+        };
+        
+        console.log('[WebView] To test API, run: window.testJulesAPI()');
     </script>
+
 </body>
 </html>`;
 }
