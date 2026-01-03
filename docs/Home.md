@@ -8,8 +8,8 @@ This project connects **Google's Jules API** directly to **VS Code** via the Mod
 ### Preview
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/sajid-mah-m/antigravity-jules-integration/master/resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
-  <img src="https://raw.githubusercontent.com/sajid-mah-m/antigravity-jules-integration/master/resources/ui-new-session.png" alt="New Session Wizard" width="45%">
+  <img src="../resources/ui-active-sessions.png" alt="Active Sessions Panel" width="45%">
+  <img src="../resources/ui-new-session.png" alt="New Session Wizard" width="45%">
 </div>
 
 ## Key Features
