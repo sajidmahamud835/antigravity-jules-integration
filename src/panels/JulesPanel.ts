@@ -145,6 +145,7 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             // Construct full session status object for UI
             const session: SessionStatus = {
                 id: sessionData.id,
+                name: sessionData.name,
                 task: missionBrief,
                 status: 'pending',
                 createdAt: new Date().toISOString(),
@@ -169,7 +170,7 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                     pendingTask: missionBrief
                 });
             } else {
-                const msg = error instanceof Error ? error.message : String(error);
+                const msg = error instanceof Error ? error.message : 'An unexpected error occurred.';
                 this._postMessage({
                     type: 'error',
                     message: `Failed to start session: ${msg}`
@@ -244,9 +245,10 @@ export class JulesPanel implements vscode.WebviewViewProvider {
                 thoughtSignatures
             });
         } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Could not connect to Jules.';
             this._postMessage({
                 type: 'error',
-                message: `Failed to refresh sessions: ${error}`
+                message: `Failed to refresh sessions: ${msg}`
             });
         }
     }
@@ -327,12 +329,14 @@ export class JulesPanel implements vscode.WebviewViewProvider {
             return;
         }
 
-        this._pollingInterval = setInterval(async () => {
-            await this._refreshSessions();
-        }, this._pollIntervalMs);
-
         // Initial refresh
         this._refreshSessions();
+
+        this._pollingInterval = setInterval(async () => {
+            if (this._view?.visible) {
+                await this._refreshSessions();
+            }
+        }, this._pollIntervalMs);
     }
 
     /**
