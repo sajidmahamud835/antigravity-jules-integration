@@ -52,7 +52,7 @@ export async function registerBridgeServer(
         const serverConfig: McpServerConfig = {
             name: 'jules-bridge',
             command: 'node',
-            args: [path.join(extensionPath, 'out', 'mcp', 'standalone.js')],
+            args: [path.join(extensionPath, 'out', 'mcp', 'BridgeServer.js')],
             env: {
                 NODE_ENV: 'production'
             },
