@@ -107,6 +107,11 @@ We welcome contributions! Whether you're fixing bugs, improving the context gath
 2. Read the **[Contribution Guide](CONTRIBUTING.md)** for setup instructions.
 3. Create a feature branch and submit a PR.
 
+## 👨‍💻 Author
+
+**Sajid Mahamud**
+- [Portfolio](https://sajidmahamud835.github.io/)
+
 ## License
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
